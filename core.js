@@ -2,7 +2,7 @@
 /* IBI Screen Recorder Studio — ENGINE: utilities, saved state, sources, audio mixer, compositor, recorder.
  * Everything runs in this browser tab; nothing is uploaded. ui.js draws the docks and dialogs on top of this. */
 const APP_NAME = 'IBI Screen Recorder Studio';
-const APP_VERSION = 'v2.0';
+const APP_VERSION = 'v2.1';
 
 /* ───────────── utilities ───────────── */
 const $ = (s, r) => (r || document).querySelector(s);

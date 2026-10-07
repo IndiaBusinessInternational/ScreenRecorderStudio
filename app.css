@@ -235,7 +235,7 @@ table.tbl th { color: var(--mut); font-weight: 600; }
 .overlay.passive { pointer-events: none; }
 
 /* ── v2.0: help assistant, multiview ── */
-.help-fab { position: fixed; right: 16px; bottom: 44px; z-index: 40; width: 52px; height: 52px; border-radius: 50%; border: 0; background: var(--acc); color: var(--acc-ink); box-shadow: var(--shadow); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.help-fab { position: fixed; right: 16px; bottom: calc(var(--dock-h, 300px) + 58px); z-index: 40; width: 52px; height: 52px; border-radius: 50%; border: 0; background: var(--acc); color: var(--acc-ink); box-shadow: var(--shadow); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .help-fab .ic { width: 26px; height: 26px; }
 .help-fab .pip { position: absolute; top: -3px; right: -3px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--rec); color: #fff; font: 700 12px/22px system-ui, sans-serif; }
 .help-panel { position: fixed; right: 16px; bottom: 44px; z-index: 41; width: min(400px, calc(100vw - 32px)); height: min(560px, calc(100dvh - 120px)); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
@@ -278,6 +278,7 @@ table.tbl kbd { white-space: normal; }
   .docks { height: auto; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "scenes sources controls" "mixer mixer trans"; }
   .dock { height: 290px; }
   #dockScenes { grid-area: scenes; } #dockSources { grid-area: sources; } #dockControls { grid-area: controls; } #dockMixer { grid-area: mixer; } #dockTrans { grid-area: trans; }
+  .help-fab { bottom: 16px; }
 }
 /* ── phone: edge to edge, 16px type, 44px targets ── */
 @media (max-width: 700px) {
@@ -293,6 +294,7 @@ table.tbl kbd { white-space: normal; }
   .list li .ib { width: 40px; height: 40px; }
   .btn { min-height: 44px; }
   .btn.sm { min-height: 36px; }
+  .btn.big { min-height: 48px; }
   .preview-area { height: auto; padding: 0; gap: 0; flex-direction: column; }
   .stage-wrap { flex: none; }
   .stage { flex: none; width: 100%; aspect-ratio: var(--ar, 16 / 9); }

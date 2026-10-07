@@ -141,7 +141,7 @@ async function doSaveReplay() {
 }
 function renderReplay() {
   const b = $('#btnReplay'), sv = $('#btnSaveReplay'); if (!b) return;
-  b.setAttribute('aria-pressed', String(RB.on)); $('#btnReplayLab').textContent = RB.on ? 'Stop Replay Buffer' : 'Start Replay Buffer';
+  b.setAttribute('aria-pressed', String(RB.on)); $('#btnReplayLab').textContent = RB.on ? 'Stop Replay' : 'Replay Buffer';
   sv.disabled = !RB.on;
   const st = $('#stReplay'); if (st) { st.hidden = !RB.on; st.textContent = 'Replay buffer: ' + (S.replaySec || 30) + ' s'; }
 }
@@ -257,6 +257,7 @@ function openStats() {
 
 /* ───────────── Help assistant (built-in, answers from the app's own guide; no AI key, no upload) ───────────── */
 const KB = [
+  { k: 'demo video tutorial watch how to use guide walkthrough', t: 'Watch the demo video', a: 'A 3-minute narrated walkthrough of the whole app: recording, sources, the mixer, scenes, Studio Mode and settings.', act: [['Play the demo video', 'demo']] },
   { k: 'start first recording how record begin screen video', t: 'Start my first recording', a: '<ol><li>Click <b>Start Recording</b> (Controls).</li><li>In the share box choose <b>Entire screen</b>, <b>Window</b> or <b>Chrome tab</b>, tick the audio switch for sound, click <b>Share</b>.</li><li>Allow the microphone if asked. After the countdown you are recording.</li><li>Click <b>Stop Recording</b> — the video saves automatically.</li></ol>', act: [['Start Recording', 'rec']] },
   { k: 'stop save where file saved downloads folder location find recordings list', t: 'Where are my recordings?', a: 'Recordings go to your <b>Downloads</b> folder, or to the folder you chose in <b>Settings → Output → Recording folder</b>. Click <b>Recordings</b> to see the list and play them.', act: [['Open Recordings', 'library'], ['Choose a folder', 'setOutput']] },
   { k: 'black dark blank video picture screen nothing recorded', t: 'My video is black', a: 'The app checks the picture every second. If Windows sends a black picture it switches drawing methods, then warns you with the fix. Most common fix (laptops with two graphics chips): Windows <b>Settings → System → Display → Graphics</b> → Google Chrome → <b>Power saving</b>, then restart Chrome. Also: don’t share a <b>minimised</b> window, and protected video (Netflix, Prime) records black on purpose.' },
@@ -311,7 +312,7 @@ function kbAnswer(q) {
 const HELP_ACT = {
   rec: () => toggleRecording(), library: () => openLibrary(), srcAdd: () => addSourceDialog(), sceneAdd: () => addScene(), studio: () => setStudio(!coll.studio),
   mini: () => openMini(), replay: () => toggleReplay(), stats: () => openStats(), multiview: () => openMultiview(), collections: () => openCollections(),
-  setOutput: () => openSettings('output'), setVideo: () => openSettings('video'), setHotkeys: () => openSettings('hotkeys'), setBackup: () => openSettings('backup'),
+  demo: () => openDemo(), setOutput: () => openSettings('output'), setVideo: () => openSettings('video'), setHotkeys: () => openSettings('hotkeys'), setBackup: () => openSettings('backup'),
 };
 const HELP = (() => {
   const fab = document.createElement('button');
@@ -358,3 +359,9 @@ const HELP = (() => {
 
 /* first visit: a gentle pointer to the assistant */
 if (!S.helpSeen) setTimeout(() => { toast('New here? The Help assistant (bottom-right, or F1) answers “how do I…” questions.', '', { label: 'Open', run: () => HELP.open() }); S.helpSeen = true; saveSettings(); }, 2500);
+
+/* demo video (v2.1): the narrated walkthrough, played inside the app */
+function openDemo() {
+  const m = modal({ title: 'Demo video — how to use IBI Screen Recorder Studio', wide: true, body: '<video class="player" controls autoplay playsinline preload="metadata" poster="demo/poster.jpg" src="demo/en.mp4"></video><p class="note">About 3 minutes, with narration and captions. Use the speed button in the player (⋮) to watch faster.</p>', foot: '<button type="button" class="btn primary" data-x>Close</button>', onClose: () => { const v = $('video', m.el); if (v) { v.pause(); v.removeAttribute('src'); v.load(); } } });
+  $('video', m.el).addEventListener('error', () => toast('The demo video could not be loaded — check the internet connection.', 'err'));
+}

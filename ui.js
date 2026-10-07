@@ -615,7 +615,7 @@ function renderControls() {
   const pb = $('#btnPause');
   pb.disabled = !on; pb.classList.toggle('paused', st === 'paused');
   pb.querySelector('use').setAttribute('href', st === 'paused' ? '#i-play' : '#i-pause');
-  $('#btnPauseLab').textContent = st === 'paused' ? 'Resume Recording' : 'Pause Recording';
+  $('#btnPauseLab').textContent = st === 'paused' ? 'Resume' : 'Pause';
   $('#btnStudio').setAttribute('aria-pressed', String(!!coll.studio));
   const mb = $('#btnMini'); mb.hidden = !CAN.docPip; mb.setAttribute('aria-pressed', String(!!MINI.win));
   $('#recPill').hidden = !on; $('#recPill').classList.toggle('paused', st === 'paused');
@@ -1357,6 +1357,7 @@ $('#menuBtn').addEventListener('click', e => openMenu(e.currentTarget, [
   { label: 'Multiview', icon: 'studio', hint: hotkeyOf('multiview'), run: openMultiview },
   { label: 'Stats', icon: 'list', run: openStats },
   { label: 'Recordings', icon: 'list', run: openLibrary },
+  { label: 'Watch the demo video', icon: 'play', run: () => openDemo() },
   { label: 'Help & keyboard shortcuts', icon: 'help', run: openHelp },
   { sep: true },
   { label: 'Fullscreen projector', icon: 'full', run: projector },

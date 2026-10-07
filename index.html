@@ -29,13 +29,13 @@
 <meta name="twitter:description" content="Record your screen, webcam and microphone with scenes, an audio mixer, transitions and Studio Mode — right in the browser.">
 <meta name="twitter:image" content="https://recorder.indiabusinessinternational.online/og-banner.png">
 <meta name="color-scheme" content="dark light">
-<script src="theme.js?v=2.0"></script>
-<link rel="stylesheet" href="app.css?v=2.0">
+<script src="theme.js?v=2.1"></script>
+<link rel="stylesheet" href="app.css?v=2.1">
 </head>
 <body>
 <div class="app" id="app">
   <header class="top">
-    <span class="ver-badge" id="verBadge" title="IBI Screen Recorder Studio version">v2.0</span>
+    <span class="ver-badge" id="verBadge" title="IBI Screen Recorder Studio version">v2.1</span>
     <span class="brand">
       <img class="logo logo-l" src="logo-light.png" alt="India Business International" width="120" height="40">
       <img class="logo logo-d" src="logo-dark.png" alt="India Business International" width="120" height="40">
@@ -132,20 +132,22 @@
         <div class="dock-h">Controls</div>
         <div class="dock-b pad controls">
           <button type="button" class="btn big rec" id="btnRec" data-act="rec"><svg class="ic"><use href="#i-rec"/></svg><span id="btnRecLab">Start Recording</span></button>
-          <button type="button" class="btn big" id="btnPause" data-act="pause" disabled><svg class="ic"><use href="#i-pause"/></svg><span id="btnPauseLab">Pause</span></button>
           <div class="ctl-row">
+            <button type="button" class="btn" id="btnPause" data-act="pause" disabled><svg class="ic"><use href="#i-pause"/></svg><span id="btnPauseLab">Pause</span></button>
             <button type="button" class="btn" data-act="shot" title="Save a PNG of the output (Ctrl+Alt+S)"><svg class="ic"><use href="#i-camera"/></svg><span>Screenshot</span></button>
+          </div>
+          <div class="ctl-row">
             <button type="button" class="btn" id="btnStudio" data-act="studio" aria-pressed="false"><svg class="ic"><use href="#i-studio"/></svg><span>Studio Mode</span></button>
-          </div>
-          <div class="ctl-row">
             <button type="button" class="btn" id="btnMini" data-act="mini" title="A small always-on-top window with the recording controls"><svg class="ic"><use href="#i-pip"/></svg><span>Mini Controls</span></button>
-            <button type="button" class="btn" data-act="library"><svg class="ic"><use href="#i-list"/></svg><span>Recordings</span></button>
           </div>
           <div class="ctl-row">
-            <button type="button" class="btn" id="btnReplay" data-act="replay" aria-pressed="false" title="Keep the last seconds in memory (OBS Replay Buffer)"><svg class="ic"><use href="#i-rec"/></svg><span id="btnReplayLab">Start Replay Buffer</span></button>
+            <button type="button" class="btn" id="btnReplay" data-act="replay" aria-pressed="false" title="Keep the last seconds in memory (OBS Replay Buffer)"><svg class="ic"><use href="#i-rec"/></svg><span id="btnReplayLab">Replay Buffer</span></button>
             <button type="button" class="btn" id="btnSaveReplay" data-act="replaySave" disabled title="Save the last seconds as a file (Ctrl+Alt+B)"><svg class="ic"><use href="#i-download"/></svg><span>Save Replay</span></button>
           </div>
-          <button type="button" class="btn" data-act="settings"><svg class="ic"><use href="#i-settings"/></svg><span>Settings</span></button>
+          <div class="ctl-row">
+            <button type="button" class="btn" data-act="library"><svg class="ic"><use href="#i-list"/></svg><span>Recordings</span></button>
+            <button type="button" class="btn" data-act="settings"><svg class="ic"><use href="#i-settings"/></svg><span>Settings</span></button>
+          </div>
         </div>
       </div>
     </section>
@@ -223,8 +225,8 @@
   </defs>
 </svg>
 
-<script src="core.js?v=2.0"></script>
-<script src="ui.js?v=2.0"></script>
-<script src="studio.js?v=2.0"></script>
+<script src="core.js?v=2.1"></script>
+<script src="ui.js?v=2.1"></script>
+<script src="studio.js?v=2.1"></script>
 </body>
 </html>
