@@ -2,7 +2,7 @@
 /* IBI Screen Recorder Studio — ENGINE: utilities, saved state, sources, audio mixer, compositor, recorder.
  * Everything runs in this browser tab; nothing is uploaded. ui.js draws the docks and dialogs on top of this. */
 const APP_NAME = 'IBI Screen Recorder Studio';
-const APP_VERSION = 'v2.1';
+const APP_VERSION = 'v2.2';
 
 /* ───────────── utilities ───────────── */
 const $ = (s, r) => (r || document).querySelector(s);
@@ -145,17 +145,56 @@ function makeItem(sourceId, extra) {
   return Object.assign({ id: uid(), sourceId, x: 0, y: 0, sx: 1, sy: 1, rot: 0, flipH: false, flipV: false, crop: { l: 0, t: 0, r: 0, b: 0 }, visible: true, locked: false, fit: false }, extra || {});
 }
 let coll = null;
+// v2.2 — READY-MADE SCENES (CEO: "as a default set (1) Screen Recording only with audio (2) Self Recording only
+// with audio (3) Screen Recording, Self Recording, both with audio … No need to manually add"). OBS opens with
+// one empty scene; Loom-style recorders open ready to record. The three share ONE screen, ONE camera and ONE mic
+// source, so switching scenes mid-recording never asks to share the screen again.
+const SCENE_TEMPLATES = {
+  screen: { name: 'Screen Recording', desc: 'Your screen with your voice (and the computer sound)', needs: ['display'] },
+  self: { name: 'Self Recording', desc: 'Just you on camera, with your voice', needs: ['webcam'] },
+  both: { name: 'Screen & Self Recording', desc: 'Your screen with your camera in a round bubble, and your voice', needs: ['display', 'webcam'] },
+  side: { name: 'Screen & Self Side by Side', desc: 'Screen on the left, you on the right, with your voice', needs: ['display', 'webcam'] },
+  brb: { name: 'Be Right Back', desc: 'A "Be right back" card — the microphone is not recorded', needs: [] },
+};
+function templateAvailable(kind) { return SCENE_TEMPLATES[kind].needs.every(n => n === 'display' ? CAN.display : CAN.media); }
+function stdSource(type, name) {   // reuse the first source of that type, or create it
+  const found = Object.values(coll.sources).find(s => s.type === type);
+  if (found) return found;
+  const s = makeSource(type, name); coll.sources[s.id] = s; return s;
+}
+function buildTemplateScene(kind, name) {
+  const items = [];
+  const mic = () => makeItem(stdSource('mic', 'Mic/Aux').id);
+  const disp = extra => makeItem(stdSource('display', 'Display Capture').id, Object.assign({ fit: 'fit' }, extra || {}));
+  const cam = extra => makeItem(stdSource('webcam', 'Camera').id, Object.assign({ fit: 'fit' }, extra || {}));
+  if (kind === 'screen') items.push(mic(), disp());
+  else if (kind === 'self') items.push(mic(), cam());
+  else if (kind === 'both') items.push(mic(), cam({ fit: 'bubble', shape: 'circle' }), disp());
+  else if (kind === 'side') items.push(mic(), cam({ fit: 'right13', shape: 'rounded', radius: 28 }), disp({ fit: 'left23' }));
+  else if (kind === 'brb') {
+    const bg = makeSource('color', uniqueSourceName('BRB background')); bg.settings.color = '#14213d'; coll.sources[bg.id] = bg;
+    const tx = makeSource('text', uniqueSourceName('BRB text')); Object.assign(tx.settings, { text: 'Be right back', size: 110, align: 'center' }); coll.sources[tx.id] = tx;
+    const t = makeItem(tx.id); items.push(t, makeItem(bg.id)); t.fit = 'center';
+  }
+  return { id: uid(), name: name || uniqueSceneName(SCENE_TEMPLATES[kind].name), tr: null, items };
+}
+// Existing collections get the three standard scenes once, only those that are missing (matched by name, so a
+// user's own "Self & Screen Recording" counts as the third one).
+const STD_MATCH = { screen: /^screen( recording)?( only)?$/i, self: /^(self|camera|webcam)( recording)?( only)?$/i, both: /(screen.*(self|camera|webcam))|((self|camera|webcam).*screen)/i };
+function addMissingStandardScenes() {
+  const added = [];
+  ['screen', 'self', 'both'].forEach(kind => {
+    if (!templateAvailable(kind)) return;
+    if (coll.scenes.some(sc => STD_MATCH[kind].test(sc.name.trim()))) return;
+    const sc = buildTemplateScene(kind); coll.scenes.push(sc); added.push(sc.name);
+  });
+  return added;
+}
 function defaultCollection() {
   coll = { v: 1, canvas: { w: 1920, h: 1080 }, fps: 30, scenes: [], sources: {}, program: '', preview: '', transition: { type: 'fade', ms: 300, color: '#000000', wipe: 'left', point: 500 }, studio: false };
-  const items = [];
-  if (CAN.display) {
-    const d = makeSource('display', 'Display Capture'); coll.sources[d.id] = d; items.push(makeItem(d.id, { fit: 'fit' }));
-  } else {
-    const w = makeSource('webcam', 'Camera'); coll.sources[w.id] = w; items.push(makeItem(w.id, { fit: 'fit' }));
-  }
-  const m = makeSource('mic', 'Mic/Aux'); coll.sources[m.id] = m; items.unshift(makeItem(m.id));
-  const sc = { id: uid(), name: CAN.display ? 'Screen Recording' : 'Camera Recording', items };
-  coll.scenes.push(sc); coll.program = coll.preview = sc.id;
+  ['screen', 'self', 'both'].filter(templateAvailable).forEach(k => coll.scenes.push(buildTemplateScene(k, SCENE_TEMPLATES[k].name)));
+  if (!coll.scenes.length) coll.scenes.push({ id: uid(), name: 'Scene 1', tr: null, items: [makeItem(stdSource('mic', 'Mic/Aux').id)] });
+  coll.program = coll.preview = coll.scenes[0].id;
   return coll;
 }
 function normalizeCollection(c) {
@@ -623,6 +662,10 @@ function transformItem(it, mode) {
   else if (mode === 'centerH') { it.x = (W - b.w) / 2; }
   else if (mode === 'centerV') { it.y = (H - b.h) / 2; }
   else if (mode === 'corner') { const k = (W * 0.24) / b.nw, m = Math.round(W * 0.02); it.sx = it.sy = k; it.x = W - b.nw * k - m; it.y = H - b.nh * k - m; }
+  else if (mode === 'left23' || mode === 'right13') {   // side by side: screen in the left two thirds, camera in the right third
+    const m = Math.round(W * 0.02), bx = mode === 'left23' ? m : W * 2 / 3 + m / 2, bw = mode === 'left23' ? W * 2 / 3 - m * 1.5 : W / 3 - m * 1.5;
+    const k = Math.min(bw / b.nw, (H - 2 * m) / b.nh); it.sx = it.sy = k; it.x = bx + (bw - b.nw * k) / 2; it.y = (H - b.nh * k) / 2;
+  }
   else if (mode === 'reset') { it.sx = it.sy = 1; it.rot = 0; it.flipH = it.flipV = false; it.crop = { l: 0, t: 0, r: 0, b: 0 }; it.x = 0; it.y = 0; }
   else if (mode === 'flipH') it.flipH = !it.flipH;
   else if (mode === 'flipV') it.flipV = !it.flipV;
@@ -638,7 +681,12 @@ function transformItem(it, mode) {
 function applyPendingFit(sc, it) {
   const mode = it.fit; if (!mode) return;
   if (mode === 'fitIfLarge') { const b = itemBox(it); transformItem(it, (b.nw > coll.canvas.w || b.nh > coll.canvas.h) ? 'fit' : 'center'); }
-  else transformItem(it, mode === 'corner' ? 'corner' : 'fit');
+  else if (mode === 'bubble') {   // round webcam bubble: centre-square crop, then bottom-right corner
+    const s = coll.sources[it.sourceId], n = natSize(s);
+    it.crop = n.w > n.h ? { l: Math.floor((n.w - n.h) / 2), r: Math.ceil((n.w - n.h) / 2), t: 0, b: 0 } : { t: Math.floor((n.h - n.w) / 2), b: Math.ceil((n.h - n.w) / 2), l: 0, r: 0 };
+    it.rot = 0; transformItem(it, 'corner');
+  }
+  else transformItem(it, ['corner', 'left23', 'right13', 'center'].includes(mode) ? mode : 'fit');
   it.fit = false; saveColl();
 }
 
@@ -871,7 +919,8 @@ function drawItem(ctx, it, s) {
   const rt = rtOf(s.id), d = drawableOf(s, rt);
   if (!d) return;
   const b = itemBox(it); if (b.w < 0.5 || b.h < 0.5) return;
-  const f = s.filters, cr = it.crop;
+  const f0 = s.filters, cr = it.crop;
+  const f = it.shape ? Object.assign({}, f0, { shape: it.shape, radius: it.radius != null ? it.radius : f0.radius, borderW: it.borderW != null ? it.borderW : f0.borderW, borderColor: it.borderColor || f0.borderColor }) : f0;
   ctx.save();
   ctx.globalAlpha = clamp((+f.opacity) / 100, 0, 1);
   if (f.blend && f.blend !== 'source-over') ctx.globalCompositeOperation = f.blend;   // OBS blending modes
@@ -1305,6 +1354,11 @@ async function takeScreenshot() {
 
 /* ───────────── boot of the engine ───────────── */
 coll = normalizeCollection(LS.get('collection', null)) || defaultCollection();
+if (!LS.get('stdScenes', false)) {   // v2.2: existing users get the standard scenes once (fresh installs already have them)
+  const added = addMissingStandardScenes();
+  LS.set('stdScenes', true);
+  if (added.length) { LS.set('collection', coll); setTimeout(() => toast('Ready-made scenes added: ' + added.join(', ') + '.', 'ok'), 1800); }
+}
 UNDO.last = { key: undoKey(coll), json: JSON.stringify(coll) };   // the state when the app opened is the first undo point
 loadStinger().catch(() => {});
 sizeCanvases();

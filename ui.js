@@ -151,9 +151,12 @@ function renderScenes() {
 function selectScene(id) {
   if (!sceneById(id)) return;
   if (coll.studio) { coll.preview = id; saveColl(); }
-  else goProgram(id);
+  else { goProgram(id); startForLive(); }
   SEL.item = null; renderAll();
 }
+// v2.2: while recording (or with the Replay Buffer on), a scene that needs the camera or the screen starts them
+// by itself — switching from "Screen Recording" to "Screen & Self Recording" just works.
+function startForLive() { if ((REC.state === 'recording' || REC.state === 'paused' || RB.on) && S.autoStart) startSceneSources(coll.program); }
 $('#sceneList').addEventListener('click', e => {
   const li = e.target.closest('[data-scene]'); if (!li) return;
   if (e.target.closest('[data-scene-more]')) { sceneMenu(li.dataset.scene, e.target.closest('button')); return; }
@@ -161,7 +164,7 @@ $('#sceneList').addEventListener('click', e => {
 });
 $('#sceneList').addEventListener('dblclick', e => {
   const li = e.target.closest('[data-scene]'); if (!li || e.target.closest('button')) return;
-  if (coll.studio) { coll.preview = li.dataset.scene; doTransition(); } else renameScene(li.dataset.scene);
+  if (coll.studio) { coll.preview = li.dataset.scene; doTransition(); startForLive(); } else renameScene(li.dataset.scene);
 });
 $('#sceneList').addEventListener('contextmenu', e => { const li = e.target.closest('[data-scene]'); if (!li) return; e.preventDefault(); sceneMenu(li.dataset.scene, { x: e.clientX, y: e.clientY }); });
 $('#sceneList').addEventListener('keydown', e => {
@@ -185,12 +188,28 @@ function sceneMenu(id, at) {
     { label: 'Remove', icon: 'trash', danger: true, disabled: coll.scenes.length < 2, run: () => removeScene(id) },
   ]);
 }
-async function addScene() {
-  const name = await promptDlg('Add Scene', 'Scene name', uniqueSceneName('Scene ' + (coll.scenes.length + 1)));
-  if (!name) return;
-  const sc = { id: uid(), name: uniqueSceneName(name), items: [] };
-  const i = coll.scenes.findIndex(s => s.id === editSceneId());
-  coll.scenes.splice(i + 1, 0, sc); saveColl(); selectScene(sc.id);
+// v2.2: Add Scene offers the ready-made layouts first, and a blank scene to build by hand.
+function addScene() {
+  const m = modal({
+    title: 'Add Scene', wide: true,
+    body: '<p class="hint">Pick a ready-made scene, or start from a blank one and add your own sources.</p><div class="type-grid">' +
+      Object.keys(SCENE_TEMPLATES).map(k => { const T = SCENE_TEMPLATES[k], ok = templateAvailable(k); return '<button type="button" data-tpl="' + k + '"' + (ok ? '' : ' disabled') + '>' + ic(k === 'self' ? 'webcam' : k === 'brb' ? 'text' : k === 'screen' ? 'monitor' : 'studio') + '<span><b>' + esc(T.name) + '</b><small>' + esc(ok ? T.desc : 'Needs screen sharing, which phones do not allow.') + '</small></span></button>'; }).join('') +
+      '<button type="button" data-tpl="blank">' + ic('plus') + '<span><b>Blank scene</b><small>An empty scene — add sources with + in the Sources dock</small></span></button></div>',
+  });
+  $$('[data-tpl]', m.el).forEach(b => b.addEventListener('click', async () => {
+    m.close();
+    let sc;
+    if (b.dataset.tpl === 'blank') {
+      const name = await promptDlg('Add Scene', 'Scene name', uniqueSceneName('Scene ' + (coll.scenes.length + 1)));
+      if (!name) return;
+      sc = { id: uid(), name: uniqueSceneName(name), tr: null, items: [] };
+    } else sc = buildTemplateScene(b.dataset.tpl);
+    const i = coll.scenes.findIndex(s => s.id === editSceneId());
+    coll.scenes.splice(i + 1, 0, sc);
+    sc.items.forEach(it => { const s = coll.sources[it.sourceId]; if (ALWAYS_LIVE.includes(s.type)) { rtOf(s.id).status = 'live'; applyPendingFit(sc, it); } else if (rtOf(s.id).w || (s.nat && s.nat.w)) applyPendingFit(sc, it); });
+    saveColl(); selectScene(sc.id);
+    toast('Added “' + sc.name + '”.', 'ok');
+  }));
 }
 async function renameScene(id) {
   const sc = sceneById(id); if (!sc) return;
@@ -308,7 +327,7 @@ async function renameSource(id) {
 }
 function webcamBubble(it) {
   const s = coll.sources[it.sourceId], n = natSize(s);
-  s.filters.shape = 'circle';
+  it.shape = 'circle';   // v2.2: this scene only — the same camera can stay a full frame in another scene
   it.crop = n.w > n.h ? { l: Math.floor((n.w - n.h) / 2), r: Math.ceil((n.w - n.h) / 2), t: 0, b: 0 } : { t: Math.floor((n.h - n.w) / 2), b: Math.ceil((n.h - n.w) / 2), l: 0, r: 0 };
   it.rot = 0; transformItem(it, 'corner'); saveColl(); rebuildPlaceholders();
 }
@@ -1289,17 +1308,19 @@ async function openMini(quiet) {
   if (!CAN.docPip) { toast('Mini Controls need Chrome or Edge (version 116 or newer) on a computer.'); return; }
   if (MINI.win) { try { MINI.win.focus(); } catch (e) {} return; }
   try {
-    const w = await documentPictureInPicture.requestWindow({ width: 360, height: 92 });
+    const w = await documentPictureInPicture.requestWindow({ width: 440, height: 170 });
     MINI.win = w;
     const d = w.document, dark = document.documentElement.getAttribute('data-theme') !== 'light';
     d.title = 'IBI Recorder';
     const style = d.createElement('style');
-    style.textContent = 'body{margin:0;font:14px/1.3 "Segoe UI",system-ui,sans-serif;background:' + (dark ? '#1d2027' : '#fff') + ';color:' + (dark ? '#e9ecf2' : '#171a21') + ';display:flex;align-items:center;gap:6px;padding:8px;height:100vh;box-sizing:border-box}' +
+    style.textContent = 'body{margin:0;font:14px/1.3 "Segoe UI",system-ui,sans-serif;background:' + (dark ? '#1d2027' : '#fff') + ';color:' + (dark ? '#e9ecf2' : '#171a21') + ';display:flex;flex-direction:column;justify-content:center;gap:0;padding:8px;height:100vh;box-sizing:border-box}' +
       '.t{font-weight:700;font-variant-numeric:tabular-nums;min-width:92px;display:flex;align-items:center;gap:6px}.dot{width:10px;height:10px;border-radius:50%;background:#888}.on .dot{background:#e5383b}.pa .dot{background:#f5b301}' +
       'button{font:inherit;border:1px solid ' + (dark ? '#353a47' : '#d3d9e2') + ';background:' + (dark ? '#262a33' : '#f2f4f7') + ';color:inherit;border-radius:6px;min-height:36px;padding:4px 10px;cursor:pointer;flex:1 1 auto;white-space:nowrap}button:disabled{opacity:.45}' +
+      '.row{display:flex;align-items:center;gap:6px;width:100%}.sc{margin-top:6px;flex-wrap:wrap}.sc button{min-height:32px;font-size:13px;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 30%}.sc button.cur{background:#35C0ED;border-color:#35C0ED;color:#04141b;font-weight:600}' +
       'button.rec{background:#e5383b;border-color:#e5383b;color:#fff;font-weight:600}button.muted{color:#e5383b}';
     d.head.appendChild(style);
-    d.body.innerHTML = '<span class="t" id="t"><span class="dot"></span><span id="tt">00:00:00</span></span><button id="r" class="rec">Start</button><button id="p">Pause</button><button id="sh" title="Screenshot">Shot</button><button id="mu" title="Mute the microphone">Mic</button>';
+    d.body.innerHTML = '<div class="row"><span class="t" id="t"><span class="dot"></span><span id="tt">00:00:00</span></span><button id="r" class="rec">Start</button><button id="p">Pause</button><button id="sh" title="Screenshot">Shot</button><button id="mu" title="Mute the microphone">Mic</button></div><div class="row sc" id="sc"></div>';
+    d.getElementById('sc').addEventListener('click', e => { const b = e.target.closest('[data-sc]'); if (b) { if (coll.studio) { coll.preview = b.dataset.sc; doTransition(); startForLive(); } else selectScene(b.dataset.sc); syncMini(); } });
     d.getElementById('r').addEventListener('click', toggleRecording);
     d.getElementById('p').addEventListener('click', pauseRecording);
     d.getElementById('sh').addEventListener('click', takeScreenshot);
@@ -1318,6 +1339,8 @@ function syncMini() {
     const r = d.getElementById('r'); r.textContent = on ? 'Stop' : st === 'idle' ? 'Start' : '…'; r.disabled = !(on || st === 'idle');
     const p = d.getElementById('p'); p.textContent = st === 'paused' ? 'Resume' : 'Pause'; p.disabled = !on;
     const mic = firstMic(), mu = d.getElementById('mu'); mu.disabled = !mic; mu.textContent = mic && mic.audio.muted ? 'Unmute' : 'Mic'; mu.className = mic && mic.audio.muted ? 'muted' : '';
+    const sc = d.getElementById('sc'), key = coll.scenes.slice(0, 6).map(x => x.id + x.name).join('|') + coll.program;
+    if (sc.dataset.k !== key) { sc.dataset.k = key; sc.innerHTML = coll.scenes.slice(0, 6).map(x => '<button data-sc="' + x.id + '" class="' + (x.id === coll.program ? 'cur' : '') + '" title="Switch to ' + esc(x.name) + '">' + esc(x.name.replace(/ Recording$/, '')) + '</button>').join(''); }
   } catch (e) {}
 }
 

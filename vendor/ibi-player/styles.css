@@ -1,0 +1,204 @@
+/* IBI Media Player — the PLAYER COMPONENT's styles, phone-first (360 px). v1.2.0: nothing here styles the page
+ * around the player (no :root, body, * or theme rules — those are in page.css, the standalone page only), so a host
+ * app such as the Grower keeps its own colours. The player reads the host's --card/--txt/… if it has them. */
+/* --------------------------------- player -------------------------------- */
+.ibp { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; height: 100%; min-height: 0; background: #000; color: #fff; overflow: hidden; --ibp-accent: var(--accent, #00c5ff); --ibp-accent-ink: var(--accent-ink, #001a24); --ibp-boost: var(--boost, #ff9f1a); --ibp-boost-ink: var(--boost-ink, #1a0e00); --ibp-card: var(--card, #16161f); --ibp-card2: var(--card2, #1d1d29); --ibp-line: var(--line, #ffffff14); --ibp-txt: var(--txt, #f2f2f6); --ibp-mut: var(--mut, #9a9aa8); --ibp-ctrl: var(--ctrl, var(--card, #0b0b10ee)); font-family: inherit; line-height: 1.45; }
+.ibp *, .ibp *::before, .ibp *::after { box-sizing: border-box; }
+:where(.ibp) :where(div, span, ol, li, h1, h2, h3, label, p) { margin: 0; }
+:where(.ibp) button { font: inherit; color: inherit; }
+.ibp-main { position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.ibp-stage { position: relative; flex: 1 1 auto; min-height: 0; background: #000; outline: none; display: grid; place-items: center; }
+/* v1.2.2 — the video is ABSOLUTE inside the stage: as a grid item its `height:100%` resolved against an
+ * auto-sized grid row, i.e. its own natural height, so a 9:16 Short in a wide player ran off the bottom
+ * and the controls went with it (Social Flow, 30 Sep 2026: "too big to play"). Absolute = the stage's box. */
+.ibp-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+.ibp-audio .ibp-stage video { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+/* v1.4.0 — PHOTO SLIDESHOW: the picture is fitted inside the stage (never cropped), on black, and fades in once
+ * decoded. The browser turns it upright from its camera (EXIF) data. In photo mode the empty <video> is hidden. */
+.ibp-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; background: #000; opacity: 0; transition: opacity .45s ease; image-orientation: from-image; user-select: none; -webkit-user-drag: none; }
+.ibp-photo-mode .ibp-photo { display: block; }
+.ibp-photo-mode .ibp-photo.ibp-shown { opacity: 1; }
+.ibp-photo-mode .ibp-stage video { visibility: hidden; }
+@media (prefers-reduced-motion: reduce) { .ibp-photo { transition: none; } }
+.ibp-art { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px; padding: 24px; background: radial-gradient(60% 50% at 50% 40%, #16324a 0%, #0a0f16 70%); cursor: pointer; }
+.ibp-art[hidden] { display: none; }
+.ibp-art-ico { width: 96px; height: 96px; margin: 0 auto 8px; border-radius: 24px; background: #ffffff12; display: grid; place-items: center; }
+.ibp-art-ico svg { width: 56px; height: 56px; fill: var(--ibp-accent); }
+.ibp-art-title { font-size: 20px; font-weight: 700; max-width: 80vw; overflow-wrap: anywhere; }
+.ibp-art-sub { font-size: 14px; color: #bfc6d0; }
+.ibp-empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 8px; padding: 24px; background: #0a0f16; }
+.ibp-empty[hidden] { display: none; }
+.ibp-empty-ico svg { width: 64px; height: 64px; fill: var(--ibp-accent); }
+.ibp-empty-t { font-size: 20px; font-weight: 700; }
+.ibp-empty-s { font-size: 14px; color: #bfc6d0; max-width: 520px; }
+.ibp-empty-b { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+.ibp-btn { min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid #ffffff2a; background: #ffffff14; color: #fff; cursor: pointer; font-weight: 600; }
+.ibp-btn-primary { background: var(--ibp-accent); color: #001a24; border-color: transparent; }
+.ibp-btn.ibp-sm { min-height: 36px; padding: 0 12px; font-size: 14px; }
+/* v1.1.2 — inside a menu or the playlist the button sits on the theme's card, not on the black stage:
+ * in the light theme white-on-white made Pause / Stop / Open .txt / Set as default invisible. */
+.ibp-menu .ibp-btn, .ibp-list .ibp-btn { color: var(--ibp-txt); background: var(--ibp-card2); border-color: var(--ibp-line); }
+.ibp-menu .ibp-btn-primary, .ibp-list .ibp-btn-primary { color: var(--ibp-accent-ink); background: var(--ibp-accent); border-color: transparent; }
+.ibp-menu .ibp-ic, .ibp-list .ibp-ic { color: var(--ibp-txt); }
+.ibp-menu .ibp-ic:hover, .ibp-list .ibp-ic:hover { background: var(--ibp-card2); }
+.ibp-msg { position: absolute; left: 12px; right: 12px; top: 12px; background: #3a1f06ee; color: #ffd9a8; border: 1px solid #f5a62366; border-radius: 10px; padding: 10px 12px; font-size: 14px; z-index: 4; }
+.ibp-flash { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #000000aa; color: #fff; font-size: 22px; font-weight: 700; padding: 10px 18px; border-radius: 12px; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 5; }
+.ibp-flash-on { opacity: 1; transition: none; }
+.ibp-bigplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 76px; height: 76px; border-radius: 50%; border: 0; background: #000000aa; color: #fff; display: grid; place-items: center; cursor: pointer; z-index: 3; }
+.ibp-bigplay svg { width: 44px; height: 44px; fill: currentColor; }
+.ibp-playing .ibp-bigplay, .ibp-empty:not([hidden]) ~ .ibp-bigplay { display: none; }
+
+.ibp-controls { flex: none; background: var(--ibp-ctrl); color: var(--ibp-txt); padding: 4px 10px 8px; transition: opacity .25s, transform .25s; z-index: 6; }
+.ibp-fs .ibp-controls, .ibp-fs-fallback .ibp-controls { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(transparent, #000000dd 40%); color: #fff; }
+.ibp-hide .ibp-controls { opacity: 0; transform: translateY(6px); pointer-events: none; }
+.ibp-hide .ibp-stage { cursor: none; }
+.ibp-seek { position: relative; height: 28px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; outline: none; }
+.ibp-seek-track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: #ffffff33; overflow: hidden; transition: transform .15s; }
+.ibp-seek:hover .ibp-seek-track, .ibp-scrub .ibp-seek-track, .ibp-seek:focus-visible .ibp-seek-track { transform: scaleY(1.6); }
+.ibp-buf { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #ffffff55; }
+.ibp-prog { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ibp-accent); }
+/* v1.2.3 — the dot stays visible at rest (a small one) and grows on hover/scrub, so the eye can always find
+ * where the video is (CEO, 30 Sep 2026: "a small dot that is viewable and moves when video is played"). */
+.ibp-knob { position: absolute; top: 14px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--ibp-accent); transform: translateY(-50%) scale(0.65); transition: transform .15s; box-shadow: 0 0 0 4px #00000033; }
+.ibp-seek:hover .ibp-knob, .ibp-scrub .ibp-knob, .ibp-seek:focus-visible .ibp-knob { transform: translateY(-50%) scale(1); }
+.ibp-tip { position: absolute; bottom: 24px; transform: translateX(-50%); background: #000000dd; color: #fff; font-size: 12px; padding: 3px 7px; border-radius: 6px; opacity: 0; pointer-events: none; white-space: nowrap; }
+.ibp-seek:hover .ibp-tip, .ibp-scrub .ibp-tip { opacity: 1; }
+.ibp-row { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.ibp-left, .ibp-right { display: flex; align-items: center; gap: 2px; min-width: 0; max-width: 100%; flex-wrap: wrap; }   /* v1.2.0: wrap on a 360 px phone — Open and Full screen were cut off */
+.ibp-right { margin-left: auto; justify-content: flex-end; }
+.ibp-ic { width: 44px; height: 44px; border: 0; border-radius: 10px; background: transparent; color: inherit; display: grid; place-items: center; cursor: pointer; flex: none; position: relative; }
+.ibp-ic svg { width: 24px; height: 24px; fill: currentColor; }
+.ibp-ic:hover, .ibp-ic:focus-visible { background: #ffffff1a; outline: none; }
+.ibp-ic.ibp-on { color: var(--ibp-accent); }
+.ibp-ic.ibp-has::after { content: ""; position: absolute; right: 9px; bottom: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--ibp-accent); }
+.ibp-ic.ibp-sm { width: 36px; height: 36px; }
+.ibp-ic.ibp-sm svg { width: 20px; height: 20px; }
+.ibp-play svg { width: 30px; height: 30px; }
+.ibp-time { font-size: 14px; color: var(--ibp-mut); padding: 0 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ibp-fs .ibp-time, .ibp-fs-fallback .ibp-time { color: #ddd; }
+.ibp-speedbtn { width: auto; min-width: 44px; padding: 0 8px; font-weight: 700; font-size: 14px; }
+.ibp-vol { display: flex; align-items: center; }
+.ibp-volrange { width: 0; opacity: 0; transition: width .2s, opacity .2s; height: 44px; margin: 0; }
+.ibp-vol:hover .ibp-volrange, .ibp-vol:focus-within .ibp-volrange { width: 150px; opacity: 1; }   /* v1.5.0: 0–300 % needs the room */
+/* v1.3.0 — VOLUME 0–200 % (v1.5.0: 0–300 %, VLC's ceiling). One track, three zones: accent up to 100 % (the notch, --n), the boost colour
+ * for the boost, grey for the rest, and a notch at 100 %. --a / --b are set by the script. */
+.ibp-volslider { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; --a: 33.333%; --b: 33.333%; --n: 33.333%; }
+.ibp-volslider::-webkit-slider-runnable-track { height: 6px; border-radius: 3px;
+  background: linear-gradient(to right, transparent calc(var(--n) - 1px), #000a calc(var(--n) - 1px) calc(var(--n) + 1px), transparent calc(var(--n) + 1px)),
+              linear-gradient(to right, var(--ibp-accent) 0 var(--a), var(--ibp-boost) var(--a) var(--b), #8888 var(--b) 100%); }
+.ibp-volslider::-moz-range-track { height: 6px; border-radius: 3px;
+  background: linear-gradient(to right, transparent calc(var(--n) - 1px), #000a calc(var(--n) - 1px) calc(var(--n) + 1px), transparent calc(var(--n) + 1px)),
+              linear-gradient(to right, var(--ibp-accent) 0 var(--a), var(--ibp-boost) var(--a) var(--b), #8888 var(--b) 100%); }
+.ibp-volslider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -5px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px #0005, 0 1px 3px #0006; }
+.ibp-volslider::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px #0005, 0 1px 3px #0006; }
+.ibp-boosting .ibp-volslider::-webkit-slider-thumb { background: var(--ibp-boost); }
+.ibp-boosting .ibp-volslider::-moz-range-thumb { background: var(--ibp-boost); }
+.ibp-volslider:focus-visible { outline: 2px solid var(--ibp-accent); outline-offset: 2px; border-radius: 4px; }
+/* The percentage beside the bar slider: shown while the slider is open, and ALWAYS while boosting, so a
+ * louder-than-normal setting is never hidden. Orange pill + dark text = readable on every theme. */
+.ibp-volpct { display: none; min-width: 44px; padding: 2px 6px; margin-left: 6px; border-radius: 6px; font-size: 13px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; color: #ddd; }
+.ibp-vol:hover .ibp-volpct, .ibp-vol:focus-within .ibp-volpct { display: inline-block; }
+.ibp-boosting .ibp-volpct { display: inline-block; background: var(--ibp-boost); color: var(--ibp-boost-ink); }
+.ibp-boosting .ibp-vol [data-act=mute] { color: var(--ibp-boost); }
+@media (hover: none) { .ibp-volrange { display: none; } }
+
+/* ------------------------------ speed menu ------------------------------- */
+.ibp-menu { position: absolute; right: 10px; bottom: 96px; width: min(360px, calc(100% - 20px)); background: var(--ibp-card); color: var(--ibp-txt); border: 1px solid var(--ibp-line); border-radius: 14px; padding: 12px; box-shadow: 0 12px 40px #00000088; z-index: 8; }
+.ibp-menu[hidden] { display: none; }
+.ibp-menu-h { display: flex; align-items: center; justify-content: space-between; font-weight: 700; margin-bottom: 8px; }
+.ibp-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.ibp-chip { min-height: 40px; border-radius: 9px; border: 1px solid var(--ibp-line); background: var(--ibp-card2); color: inherit; cursor: pointer; font-weight: 600; font-size: 14px; }
+.ibp-chip.ibp-on { background: var(--ibp-accent); color: #001a24; border-color: transparent; }
+.ibp-custom { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--ibp-line); }
+.ibp-custom-h { display: flex; justify-content: space-between; font-size: 14px; color: var(--ibp-mut); }
+.ibp-custom-h b { color: var(--ibp-txt); font-size: 16px; }
+.ibp-custom-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.ibp-custom-row .ibp-chip { width: 40px; flex: none; font-size: 20px; line-height: 1; }
+.ibp-raterange { flex: 1; accent-color: var(--ibp-accent); height: 40px; margin: 0; min-width: 0; }
+.ibp-custom-scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--ibp-mut); padding: 0 48px; }
+.ibp-check { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; color: var(--ibp-mut); min-height: 32px; }
+.ibp-check input { width: 18px; height: 18px; accent-color: var(--ibp-accent); }
+/* v1.3.0 — the Volume section of the Speed and volume menu (the only volume control on a touch screen). */
+.ibp-volsec { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--ibp-line); }
+.ibp-volsec .ibp-custom-h b { padding: 0 6px; border-radius: 6px; }
+.ibp-boosting .ibp-volsec .ibp-custom-h b { background: var(--ibp-boost); color: var(--ibp-boost-ink); }
+.ibp-volpresets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 8px; }
+.ibp-volpresets .ibp-chip { padding: 0 2px; }
+.ibp-menuvol { flex: 1; min-width: 0; height: 40px; margin: 0; }
+.ibp-custom-row .ibp-chip.ibp-vstep { width: 40px; flex: none; font-size: 20px; line-height: 1; }
+.ibp-volnote { margin-top: 6px; font-size: 13px; line-height: 1.4; color: var(--ibp-mut); }
+.ibp-menu { max-height: calc(100% - 110px); overflow-y: auto; }
+/* v1.4.0 — the Photo slideshow section of the menu. */
+.ibp-photosec { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--ibp-line); }
+.ibp-photochips { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 8px; }
+.ibp-photochips .ibp-chip { padding: 0 2px; }
+
+/* -------------------------------- read aloud ------------------------------- */
+.ibp-readmenu { width: min(440px, calc(100% - 20px)); }
+.ibp-readtext { width: 100%; min-height: 96px; max-height: 40dvh; resize: vertical; font: inherit; font-size: 15px; color: var(--ibp-txt); background: var(--ibp-card2); border: 1px solid var(--ibp-line); border-radius: 10px; padding: 10px; }
+.ibp-read-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.ibp-read-lab { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ibp-mut); flex: 1; min-width: 0; }
+.ibp-voices { flex: 1; min-width: 0; min-height: 40px; font: inherit; font-size: 14px; color: var(--ibp-txt); background: var(--ibp-card2); border: 1px solid var(--ibp-line); border-radius: 9px; padding: 0 8px; }
+.ibp-read-rate b { color: var(--ibp-txt); min-width: 44px; }
+.ibp-readrate { flex: 1; min-width: 0; accent-color: var(--ibp-accent); height: 40px; margin: 0; }
+.ibp-read-btns .ibp-btn { display: inline-flex; align-items: center; gap: 6px; }
+.ibp-read-btns .ibp-btn svg { width: 18px; height: 18px; fill: currentColor; }
+.ibp-read-hint { margin-top: 8px; font-size: 13px; color: var(--ibp-mut); min-height: 18px; }
+.ibp-reading .ibp-readbtn { color: var(--ibp-accent); }
+
+/* -------------------------------- playlist -------------------------------- */
+.ibp-list { grid-row: 2; min-width: 0; background: var(--ibp-card); color: var(--ibp-txt); border-top: 1px solid var(--ibp-line); display: none; flex-direction: column; min-height: 0; max-height: 45dvh; }
+.ibp-list.ibp-list-open { display: flex; }
+.ibp-list-h { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--ibp-line); flex-wrap: wrap; }
+.ibp-list-title { font-weight: 700; }
+.ibp-list-count { color: var(--ibp-mut); font-size: 14px; }
+.ibp-list-acts { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ibp-items { list-style: none; padding: 6px; overflow: auto; min-height: 0; }
+.ibp-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 10px; cursor: pointer; min-height: 52px; }
+.ibp-item:hover { background: var(--ibp-card2); }
+.ibp-item.ibp-current { background: var(--ibp-card2); box-shadow: inset 3px 0 0 var(--ibp-accent); }
+.ibp-item-ico { flex: none; width: 32px; height: 32px; border-radius: 8px; background: #ffffff10; display: grid; place-items: center; }
+.ibp-item-ico svg { width: 18px; height: 18px; fill: var(--ibp-mut); }
+.ibp-item-thumb { overflow: hidden; background: #0003; }
+.ibp-item-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; image-orientation: from-image; }
+.ibp-item-t { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ibp-item-title { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ibp-item-sub { font-size: 12px; color: var(--ibp-mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ibp-item-rm { color: var(--ibp-mut); }
+.ibp-list-empty { padding: 20px; color: var(--ibp-mut); text-align: center; font-size: 14px; }
+.ibp-list-empty[hidden] { display: none; }
+.ibp-dragover::after { content: "Drop to add to the playlist"; position: absolute; inset: 8px; border: 2px dashed var(--ibp-accent); border-radius: 14px; display: grid; place-items: center; font-size: 18px; font-weight: 700; color: #fff; background: #00000088; z-index: 9; pointer-events: none; }
+.ibp-fs, .ibp-fs-fallback { position: fixed !important; inset: 0; z-index: 1000; height: 100dvh !important; }
+.ibp-fs .ibp-list, .ibp-fs-fallback .ibp-list { display: none; }
+
+/* --------------------------------- desktop -------------------------------- */
+@media (min-width: 900px) {
+  .ibp { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr); }
+  .ibp-list { grid-row: 1; grid-column: 2; width: 0; max-height: none; border-top: 0; border-left: 1px solid var(--ibp-line); display: flex; overflow: hidden; transition: width .2s; }
+  .ibp-list.ibp-list-open { width: 340px; }
+  .ibp-list-close { display: none; }
+}
+@media (max-width: 480px) {
+  .ibp-controls { padding: 2px 4px 6px; }
+  .ibp-ic { width: 40px; height: 40px; }
+  .ibp-time { font-size: 13px; padding: 0 4px; }
+  .ibp-menu { bottom: 88px; }
+}
+
+/* v1.2.0 — THE DIVIDER between player and playlist (CEO, 28 Sep 2026): drag it left or right, like the
+ * playlist pane of Windows Media Player or the sidebar of VS Code. The width is remembered; arrow keys
+ * move it; a double-click restores the default. Desktop only — on a phone the playlist sits below. */
+.ibp-split { display: none; }
+.ibp-fs .ibp-split, .ibp-fs-fallback .ibp-split { display: none !important; }
+@media (min-width: 900px) {
+  .ibp { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .ibp-list { grid-column: 3; }
+  .ibp-list.ibp-list-open { width: var(--ibp-list-w, 340px); }
+  .ibp:has(.ibp-list-open) .ibp-split { display: block; grid-row: 1; grid-column: 2; width: 10px; margin: 0 -5px; position: relative; z-index: 7; cursor: col-resize; touch-action: none; outline: none; }
+  .ibp-split::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background: var(--ibp-line); transition: background .15s, width .15s, left .15s; }
+  .ibp-split:hover::after, .ibp-split:focus-visible::after, .ibp-resizing .ibp-split::after { background: var(--ibp-accent); width: 4px; left: 3px; }
+  .ibp-split::before { content: ""; position: absolute; top: 50%; left: 1px; width: 8px; height: 40px; margin-top: -20px; border-radius: 4px; background: var(--ibp-card2); border: 1px solid var(--ibp-line); }
+  .ibp-resizing, .ibp-resizing * { cursor: col-resize !important; user-select: none; }
+  .ibp-resizing .ibp-list { transition: none; }
+  .ibp-list { border-left: 0; }
+}

@@ -1,4 +1,4 @@
-# IBI Screen Recorder Studio v2.1
+# IBI Screen Recorder Studio v2.2
 
 A browser-based screen recorder laid out like OBS Studio — by **India Business International**.
 Everything runs in the browser tab; nothing that is recorded is uploaded anywhere.
@@ -27,6 +27,12 @@ Live: https://recorder.indiabusinessinternational.online/ (also reachable at htt
 - Stats: FPS, render time, missed frames, size, bitrate. Keyboard shortcuts (Ctrl+Alt+R/P/S/T/M, Ctrl+Alt+1…9).
 - Standard IBI app features: version badge, IBI logo, light/dark switch, installable PWA (banner, header and menu Install),
   backup & restore of the whole scene collection, edge-to-edge phone layout, Open Graph tags.
+
+## v2.2 — ready-made scenes (what sets it apart from OBS)
+- First launch opens with **Screen Recording** (screen + mic), **Self Recording** (camera + mic) and **Screen & Self Recording** (screen + round camera bubble + mic), sharing one screen, one camera and one mic source. Existing collections get the missing ones once (matched by name).
+- **Add Scene** offers these plus Side by Side and Be Right Back, or a blank scene.
+- Switching scenes while recording starts the camera/screen by itself; **Mini Controls** has scene buttons; the camera shape is per scene (`item.shape`).
+- The demo video plays in the **IBI Media Player** — pinned copy in `vendor/ibi-player/` (see VERSION.txt), loaded on demand, with a plain `<video>` fallback.
 
 ## v2.1
 - **Demo video** (`demo/en.mp4`, 3:45, narrated + captioned; ⋮ → Watch the demo video, or ask the Help assistant). Built with a copy of the IBI Apps demo pipeline (puppeteer capture → edge-tts Ava → Chrome-composed captions → ffmpeg).

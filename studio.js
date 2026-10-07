@@ -271,7 +271,7 @@ const KB = [
   { k: 'noise background fan hiss gate suppression echo', t: 'Remove background noise', a: 'Mic Properties: keep <b>Noise suppression</b> on. For more, open its ⋯ → Advanced audio → <b>Noise gate</b> (silences the mic between words).' },
   { k: 'pause resume break', t: 'Pause a recording', a: 'Click <b>Pause Recording</b> (or Ctrl+Alt+P). Click <b>Resume Recording</b> to continue — it stays one file.' },
   { k: 'mini controls floating small window on top other apps', t: 'Control recording while using other apps', a: '<b>Mini Controls</b> opens a small always-on-top window with the timer, Stop, Pause, Screenshot and Mic. It is visible in an entire-screen recording — turn it off in Settings → General, or share a window/tab instead.', act: [['Open Mini Controls', 'mini']] },
-  { k: 'scene scenes switch change multiple layouts', t: 'What are scenes?', a: 'A scene is a layout (e.g. “Screen only”, “Screen + webcam”, “Webcam only”). Add scenes with <b>+</b> in the Scenes dock and click a scene to switch with the chosen transition. Ctrl+Alt+1…9 switches by keyboard.', act: [['Add a scene', 'sceneAdd']] },
+  { k: 'scene scenes switch change multiple layouts ready made default screen self both', t: 'Scenes — ready-made layouts', a: 'Three scenes are ready from the start: <b>Screen Recording</b> (screen + voice), <b>Self Recording</b> (camera + voice) and <b>Screen & Self Recording</b> (screen + round camera + voice). Click a scene — even while recording — to switch; the camera or screen starts by itself when needed. Ctrl+Alt+1…9 or the buttons in Mini Controls switch too. <b>+</b> in the Scenes dock adds more ready-made scenes or a blank one.', act: [['Add a scene', 'sceneAdd']] },
   { k: 'studio mode preview program transition button', t: 'Studio Mode', a: 'Studio Mode shows <b>Preview</b> (what you edit) beside <b>Program</b> (what is recorded). Click scenes to load them into Preview, then press <b>Transition</b>.', act: [['Toggle Studio Mode', 'studio']] },
   { k: 'transition fade slide cut wipe stinger effect', t: 'Transitions', a: 'Pick a transition in the Scene Transitions dock: Cut, Fade, Fade to Black/Colour, Slide, Swipe, Luma Wipe (8 shapes) or Stinger (your own video). Right-click a scene → <b>Transition override</b> to give one scene its own.' },
   { k: 'text title caption subtitle clock time date', t: 'Add text or a clock', a: 'Add a source → <b>Text</b>. Type <code>{time}</code>, <code>{date}</code> or <code>{datetime}</code> to show a live clock.', act: [['Add a source', 'srcAdd']] },
@@ -361,7 +361,43 @@ const HELP = (() => {
 if (!S.helpSeen) setTimeout(() => { toast('New here? The Help assistant (bottom-right, or F1) answers “how do I…” questions.', '', { label: 'Open', run: () => HELP.open() }); S.helpSeen = true; saveSettings(); }, 2500);
 
 /* demo video (v2.1): the narrated walkthrough, played inside the app */
-function openDemo() {
-  const m = modal({ title: 'Demo video — how to use IBI Screen Recorder Studio', wide: true, body: '<video class="player" controls autoplay playsinline preload="metadata" poster="demo/poster.jpg" src="demo/en.mp4"></video><p class="note">About 3 minutes, with narration and captions. Use the speed button in the player (⋮) to watch faster.</p>', foot: '<button type="button" class="btn primary" data-x>Close</button>', onClose: () => { const v = $('video', m.el); if (v) { v.pause(); v.removeAttribute('src'); v.load(); } } });
-  $('video', m.el).addEventListener('error', () => toast('The demo video could not be loaded — check the internet connection.', 'err'));
+// v2.2: played in the IBI Media Player (a pinned copy bundled in vendor/ibi-player — customer-facing and internal
+// apps never load code from another IBI subdomain). Falls back to the browser's own player if the bundle fails.
+const DEMO = { url: 'demo/en.mp4', poster: 'demo/poster.jpg', title: 'IBI Screen Recorder Studio — how to use' };
+let playerLoad = null;
+function loadIBIPlayer() {
+  if (window.IBIPlayer) return Promise.resolve(true);
+  if (!playerLoad) playerLoad = new Promise(res => {
+    const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'vendor/ibi-player/styles.css?v=1.5.1'; document.head.appendChild(l);
+    const s = document.createElement('script'); s.src = 'vendor/ibi-player/app.js?v=1.5.1'; s.onload = () => res(!!window.IBIPlayer); s.onerror = () => { playerLoad = null; res(false); }; document.head.appendChild(s);
+  });
+  return playerLoad;
+}
+async function openDemo() {
+  let api = null;
+  const m = modal({ title: 'Demo video — how to use IBI Screen Recorder Studio', wide: true, body: '<div class="demo-box" id="demoBox"><p class="hint">Loading the player…</p></div><p class="note">About 3 minutes, with narration and captions. Played in the IBI Media Player: speed 0.25×–4×, ±10 s (J / L), full screen (F), picture-in-picture (I).</p>', foot: '<button type="button" class="btn primary" data-x>Close</button>', onClose: () => { if (api) api.destroy(); const v = $('video', m.el); if (v) { v.pause(); v.removeAttribute('src'); v.load(); } } });
+  m.el.classList.add('demo-modal');
+  const box = $('#demoBox', m.el), ok = await loadIBIPlayer();
+  if (m.closed()) return;
+  if (ok) {
+    box.innerHTML = '<div class="demo-mount"></div>';
+    const mount = $('.demo-mount', box);
+    api = IBIPlayer.mount(mount, { items: [{ url: DEMO.url, title: DEMO.title, poster: DEMO.poster }], autoplay: true, showOpen: false, title: 'IBI Screen Recorder Studio', keysGlobal: false });
+    // the picture keeps a full 16:9 and the player's controls sit BELOW it (they wrap to two rows on a phone)
+    let barMax = 0, lastW = 0;   // the controls hide while playing — keep the space of the tallest bar seen, so the box never jumps
+    const fit = () => {
+      const stage = $('.ibp-stage', mount); if (!stage) return;
+      if (box.clientWidth !== lastW) { lastW = box.clientWidth; barMax = 0; }
+      barMax = Math.max(barMax, mount.getBoundingClientRect().height - stage.getBoundingClientRect().height);
+      const h = Math.round(Math.min(innerHeight * 0.78, box.clientWidth * 9 / 16 + barMax));
+      if (Math.abs(box.offsetHeight - h) > 1) box.style.height = h + 'px';
+    };
+    const ro = new ResizeObserver(() => fit()); ro.observe(box); ro.observe(mount);   // no rAF: it pauses in a hidden window
+    const prevDestroy = api.destroy; api.destroy = () => { ro.disconnect(); prevDestroy(); };
+    setTimeout(fit, 0); setTimeout(fit, 500);
+  }
+  else {
+    box.innerHTML = '<video class="player" controls autoplay playsinline preload="metadata" poster="' + DEMO.poster + '" src="' + DEMO.url + '"></video>';
+    $('video', box).addEventListener('error', () => toast('The demo video could not be loaded — check the internet connection.', 'err'));
+  }
 }
