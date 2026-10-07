@@ -1,0 +1,20 @@
+{
+  "name": "IBI Screen Recorder Studio",
+  "short_name": "IBI Recorder",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "background_color": "#121418",
+  "theme_color": "#16181d",
+  "orientation": "any",
+  "description": "Record your screen, webcam and microphone with scenes, an audio mixer, transitions and Studio Mode — right in the browser. India Business International.",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "categories": ["productivity", "utilities", "photo"],
+  "launch_handler": { "client_mode": "focus-existing" }
+}
