@@ -2,7 +2,7 @@
  * NETWORK-FIRST for everything: online you always get the live files (no stale versions);
  * the cache is only used when the network fails. Other sites are never touched.
  * Bump CACHE with every release. */
-const CACHE = 'ibi-recorder-v1-1';
+const CACHE = 'ibi-recorder-v1-2';
 const PREFIX = 'ibi-recorder-';   // only THIS app's old caches are cleared (other apps may share the origin, e.g. github.io)
 self.addEventListener('install', (e) => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then((c) => c.addAll([new Request('./', { cache: 'reload' })])).catch(() => {})); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE && k.startsWith(PREFIX)).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });

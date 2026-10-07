@@ -2,7 +2,7 @@
 /* IBI Screen Recorder Studio — ENGINE: utilities, saved state, sources, audio mixer, compositor, recorder.
  * Everything runs in this browser tab; nothing is uploaded. ui.js draws the docks and dialogs on top of this. */
 const APP_NAME = 'IBI Screen Recorder Studio';
-const APP_VERSION = 'v1.1';
+const APP_VERSION = 'v1.2';
 
 /* ───────────── utilities ───────────── */
 const $ = (s, r) => (r || document).querySelector(s);
@@ -240,8 +240,39 @@ function teardown(rt) {
 }
 function noteNat(s, w, h) {
   if (!w || !h) return;
-  if (!s.nat || s.nat.w !== w || s.nat.h !== h) { s.nat = { w, h }; saveColl(); }
+  const old = s.nat, changed = !old || old.w !== w || old.h !== h;
+  // v1.2: the shared surface changed size (another window/tab was chosen, or the window was resized).
+  // Items that filled the canvas with the OLD size keep filling it with the new one — OBS "fit to screen"
+  // bounding box / Loom behaviour. A capture left at the top-left corner and spilling off the canvas
+  // (the v1.1 symptom: "only part of the window is in the video") is re-fitted too. Placed items keep their scale.
+  const refit = [];
+  if (s.type === 'display' || s.type === 'webcam') coll.scenes.forEach(sc => sc.items.forEach(it => {
+    if (it.sourceId !== s.id || it.fit || it.locked) return;
+    const m = (old && changed ? fittedMode(it, old) : '') || (spillsFromCorner(it, { w, h }) ? 'fit' : '');
+    if (m) refit.push([it, m]);
+  }));
+  if (changed) s.nat = { w, h };
+  refit.forEach(([it, m]) => transformItem(it, m));
+  if (changed || refit.length) saveColl();
   coll.scenes.forEach(sc => sc.items.forEach(it => { if (it.sourceId === s.id && it.fit) applyPendingFit(sc, it); }));
+}
+function boxWith(it, nat) {
+  const c = it.crop; let nw = Math.max(1, nat.w - c.l - c.r), nh = Math.max(1, nat.h - c.t - c.b);
+  if (it.rot % 180) { const t = nw; nw = nh; nh = t; }
+  return { w: nw * it.sx, h: nh * it.sy };
+}
+function spillsFromCorner(it, nat) {
+  const b = boxWith(it, nat), W = coll.canvas.w, H = coll.canvas.h, tol = 4;
+  return Math.abs(it.x) <= tol && Math.abs(it.y) <= tol && (b.w > W + tol || b.h > H + tol);
+}
+// Was this item filling the canvas (fit or stretch) when the source had size `nat`?
+function fittedMode(it, nat) {
+  const W = coll.canvas.w, H = coll.canvas.h, bx = boxWith(it, nat), bw = bx.w, bh = bx.h, tol = 4;
+  const fullW = Math.abs(bw - W) < tol, fullH = Math.abs(bh - H) < tol;
+  const centred = Math.abs(it.x + bw / 2 - W / 2) < tol && Math.abs(it.y + bh / 2 - H / 2) < tol;
+  if (!centred || bw > W + tol || bh > H + tol) return '';
+  if (fullW && fullH) return Math.abs(it.sx / it.sy - 1) < 0.01 ? 'fit' : 'stretch';
+  return fullW || fullH ? 'fit' : '';
 }
 // Two independent ways to read a live video track. VideoFrames (MediaStreamTrackProcessor) are the fast path;
 // a <video> element is the classic path. The health check below switches a source to the <video> path by itself
@@ -728,7 +759,7 @@ const ticker = new Worker(URL.createObjectURL(new Blob(['let t=0;onmessage=e=>{c
 let lastTick = 0;
 ticker.onmessage = () => {
   const now = performance.now(), target = 1000 / coll.fps;
-  if (lastTick) {
+  if (lastTick && REC.state === 'recording') {   // like OBS: missed frames are counted only while recording
     const gap = now - lastTick;
     STATS.total++;
     if (gap > target * 1.9) { const miss = Math.round(gap / target) - 1; STATS.dropped += miss; STATS.total += miss; }
