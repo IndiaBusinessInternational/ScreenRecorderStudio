@@ -3,7 +3,7 @@
 A browser-based screen recorder laid out like OBS Studio — by **India Business International**.
 Everything runs in the browser tab; nothing that is recorded is uploaded anywhere.
 
-Live: https://recorder.indiabusinessinternational.online/ (until DNS is added: https://indiabusinessinternational.github.io/ScreenRecorderStudio/)
+Live: https://recorder.indiabusinessinternational.online/ (also reachable at https://indiabusinessinternational.github.io/ScreenRecorderStudio/, which redirects)
 
 ## Features
 - **Scenes** — add, rename, duplicate, reorder, remove; click to switch with a transition.
