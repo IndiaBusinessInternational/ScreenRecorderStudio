@@ -1,4 +1,4 @@
-# IBI Screen Recorder Studio v1.0
+# IBI Screen Recorder Studio v1.1
 
 A browser-based screen recorder laid out like OBS Studio — by **India Business International**.
 Everything runs in the browser tab; nothing that is recorded is uploaded anywhere.
@@ -22,6 +22,7 @@ Live: https://recorder.indiabusinessinternational.online/ (until DNS is added: h
   countdown; save straight to a chosen folder (crash-safe, no size limit) or to Downloads; WebM/MKV get a real duration.
 - **Mini Controls** — always-on-top floating window (Document Picture-in-Picture) to stop/pause/mute while working in other apps.
 - Screenshot (PNG), fullscreen projector, picture-in-picture output, recordings list with in-app playback.
+- **Picture health check (v1.1)** — every second each screen/camera is checked; a black picture switches to a second drawing method by itself, then warns with the fix (two-graphics-chip laptops, minimised window, protected video); sharing stopped mid-recording opens a dialog; each saved recording is checked and flagged if black.
 - Stats: FPS, render time, missed frames, size, bitrate. Keyboard shortcuts (Ctrl+Alt+R/P/S/T/M, Ctrl+Alt+1…9).
 - Standard IBI app features: version badge, IBI logo, light/dark switch, installable PWA (banner, header and menu Install),
   backup & restore of the whole scene collection, edge-to-edge phone layout, Open Graph tags.

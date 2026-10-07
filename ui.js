@@ -237,6 +237,7 @@ function renderSources() {
     return '<li role="option" tabindex="-1" draggable="true" data-item="' + it.id + '" class="' + (it.id === SEL.item ? 'sel' : '') + (it.visible ? '' : ' hid') + '" aria-selected="' + (it.id === SEL.item) + '" title="' + esc(T.label + (rt.err ? ' — ' + rt.err : '')) + '">' +
       ic(T.icon) + (live ? '<span class="st-dot ' + rt.status + '" aria-label="' + rt.status + '"></span>' : '') +
       '<span class="nm">' + esc(s.name) + '</span>' +
+      (rt.warn ? '<button type="button" class="ib warn" data-row="warn" aria-label="Problem with ' + esc(s.name) + '" title="Black picture — click for the fix">' + ic('warn') + '</button>' : '') +
       (needs ? '<button type="button" class="btn sm" data-row="start">' + ((s.type === 'image' || s.type === 'media') ? 'File' : 'Start') + '</button>' : '') +
       '<button type="button" class="ib ' + (it.visible ? '' : 'off') + '" data-row="vis" aria-label="' + (it.visible ? 'Hide' : 'Show') + ' ' + esc(s.name) + '" title="' + (it.visible ? 'Hide' : 'Show') + '">' + ic(it.visible ? 'eye' : 'eyeoff') + '</button>' +
       '<button type="button" class="ib ' + (it.locked ? 'on' : 'off') + '" data-row="lock" aria-label="' + (it.locked ? 'Unlock' : 'Lock') + ' ' + esc(s.name) + '" title="' + (it.locked ? 'Unlock' : 'Lock') + '">' + ic(it.locked ? 'lock' : 'unlock') + '</button>' +
@@ -250,6 +251,7 @@ $('#sourceList').addEventListener('click', e => {
   if (!b) { selectItem(it.id); return; }
   const s = coll.sources[it.sourceId];
   if (b.dataset.row === 'vis') { it.visible = !it.visible; updateGates(0); saveColl(); renderSources(); renderMixer(true); rebuildPlaceholders(); }
+  else if (b.dataset.row === 'warn') { healthDialog(s, 'black'); }
   else if (b.dataset.row === 'lock') { it.locked = !it.locked; saveColl(); renderSources(); }
   else if (b.dataset.row === 'start') { selectItem(it.id); if (s.type === 'image' || s.type === 'media') openProps(s.id, 'props'); else startSource(s.id); }
   else if (b.dataset.row === 'more') { selectItem(it.id); itemMenu(it, b); }
@@ -581,6 +583,7 @@ async function stopRecordingFlow() {
   const e = await stopRecording();
   if (!e) return;
   if (e.error) return;
+  verifyRecording(e);
   toast((e.where === 'folder' ? 'Saved in “' + e.folder + '”: ' : 'Saved to Downloads: ') + e.name + ' (' + fmtSize(e.size) + ', ' + fmtDur(e.ms) + ')', 'ok', { label: 'Recordings', run: openLibrary });
 }
 function toggleRecording() { if (REC.state === 'recording' || REC.state === 'paused') stopRecordingFlow(); else if (REC.state === 'idle') startRecordingFlow(); }
@@ -601,6 +604,65 @@ function renderControls() {
   syncMini();
 }
 setRecHook(() => { renderControls(); statusTick(); });
+
+/* ───────────── health warnings (v1.1) ───────────── */
+let healthOpen = null;
+function healthDialog(s, kind) {
+  if (healthOpen && !healthOpen.closed()) { if (healthOpen.kind === kind && healthOpen.src === s.id) return; healthOpen.close(); }   // a newer problem replaces the old dialog
+  const rec = REC.state === 'recording' || REC.state === 'paused';
+  const isCam = s.type === 'webcam';
+  let title, body, foot;
+  if (kind === 'stopped') {
+    title = 'Screen sharing stopped';
+    body = '<p><b>' + esc(s.name) + '</b> stopped sharing (Chrome’s <b>Stop sharing</b> button, or the shared window was closed).</p><p>The recording is still running, but from now on it shows <b>no screen</b>.</p>';
+    foot = '<button type="button" class="btn" data-h="keep">Keep recording</button><button type="button" class="btn danger" data-h="stop">Stop recording</button><button type="button" class="btn primary" data-h="share">Share screen again</button>';
+  } else {
+    title = isCam ? 'The camera picture is black' : 'Your screen is coming through black';
+    body = isCam
+      ? '<p>The camera is on, but it is sending a black picture.</p><ol><li>Open the camera’s <b>privacy shutter</b> or remove the lens cover.</li><li>Close other apps that use the camera (Zoom, Teams, the Camera app).</li><li>Click <b>Restart camera</b>.</li></ol>'
+      : '<p>Screen sharing is running, but Windows is sending a <b>black picture</b>' + (rec ? ', so the recording is black too' : '') + '. The app has already tried its second drawing method.</p>' +
+        '<p><b>Most common fix — laptops with two graphics chips</b> (the same issue OBS has):</p><ol><li>Open Windows <b>Settings</b> → <b>System</b> → <b>Display</b> → <b>Graphics</b>.</li><li>Find <b>Google Chrome</b> (or Microsoft Edge) in the list and click it → <b>Options</b>.</li><li>Choose <b>Power saving</b>, click <b>Save</b>.</li><li>Close Chrome completely, open it again, then click <b>Share screen again</b> here.</li></ol>' +
+        '<p><b>Other causes:</b> you shared a window that is <b>minimised</b> (restore it); or the screen is playing <b>protected video</b> (Netflix, Prime Video, Hotstar show black on purpose). In the share picker, <b>Entire screen</b> is the safest choice.</p>';
+    foot = (rec ? '<button type="button" class="btn danger" data-h="stop">Stop recording</button>' : '') + '<button type="button" class="btn" data-h="close">Close</button><button type="button" class="btn primary" data-h="share">' + (isCam ? 'Restart camera' : 'Share screen again') + '</button>';
+  }
+  healthOpen = modal({ title, body, foot }); healthOpen.kind = kind; healthOpen.src = s.id;
+  healthOpen.el.addEventListener('click', async e => {
+    const b = e.target.closest('[data-h]'); if (!b) return;
+    const a = b.dataset.h; healthOpen.close();
+    if (a === 'share') { await restartSource(s.id); }
+    else if (a === 'stop') stopRecordingFlow();
+  });
+}
+setHealthHook((s, kind) => {
+  if (kind === 'black') toast(s.name + ': the picture is black.', 'err', { label: 'Fix', run: () => healthDialog(s, 'black') });
+  healthDialog(s, kind);
+});
+// After saving, look inside the file: three frames, all black → say so at once instead of leaving it to be found later.
+async function verifyRecording(e) {
+  let url = LIB.urls.get(e.id), temp = false;
+  try {
+    if (!url && e.where === 'folder' && FOLDER.handle) { const fh = await FOLDER.handle.getFileHandle(e.name); url = URL.createObjectURL(await fh.getFile()); temp = true; }
+    if (!url) return;
+    const v = document.createElement('video'); v.muted = true; v.preload = 'auto'; v.src = url;
+    await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = rej; setTimeout(rej, 8000); });
+    const D = isFinite(v.duration) && v.duration > 0 ? v.duration : e.ms / 1000;
+    let bright = 0, checked = 0;
+    for (const f of [0.2, 0.5, 0.8]) {
+      v.currentTime = D * f;
+      await new Promise((res, rej) => { v.onseeked = res; setTimeout(rej, 5000); });
+      const st = lumaStats(v, 0, 0, v.videoWidth || 1, v.videoHeight || 1); checked++;
+      if (st && st.max >= 20) bright++;
+    }
+    const sc = sceneById(coll.program), hasVisual = sc && sc.items.some(i => i.visible && isVisual(i));
+    if (checked && !bright && hasVisual) {
+      const srcs = sc.items.map(i => coll.sources[i.sourceId]);
+      const d = srcs.find(x => x.type === 'display') || srcs.find(x => x.type === 'webcam');
+      toast('Warning: “' + e.name + '” looks completely black.', 'err', { label: 'Why?', run: () => { if (d) healthDialog(d, 'black'); else openHelp(); } });
+      const rec = LIB.list.find(x => x.id === e.id); if (rec) { rec.black = true; LS.set('library', LIB.list); }
+    }
+  } catch (er) { /* not decodable here (e.g. MKV in some browsers) — nothing to report */ }
+  finally { if (temp && url) URL.revokeObjectURL(url); }
+}
 
 /* ───────────── status bar ───────────── */
 function statusTick() {
@@ -782,7 +844,9 @@ function statusLine(s) {
   if (rt.status === 'live') {
     const res = rt.w ? ' · ' + rt.w + '×' + rt.h : '';
     const what = s.type === 'display' ? ({ monitor: 'Entire screen', window: 'Window', browser: 'Browser tab' }[rt.surface] || 'Shared') : s.type === 'webcam' ? 'Camera on' : 'Microphone on';
-    return '<span class="st-dot live" style="display:inline-block"></span> ' + esc(what + (rt.label ? ': ' + rt.label : '') + res) + (s.type === 'display' ? (rt.hasAudio ? ' · with sound' : ' · no sound') : '');
+    return '<span class="st-dot live" style="display:inline-block"></span> ' + esc(what + (rt.label ? ': ' + rt.label : '') + res) + (s.type === 'display' ? (rt.hasAudio ? ' · with sound' : ' · no sound') : '') +
+      (rt.path === 'video' && rt.triedVideo ? ' · compatibility mode' : '') +
+      (rt.warn === 'black' ? '<br><span class="note warn">⚠ The picture is black. <button type="button" class="btn sm" data-p="why">Why and how to fix</button></span>' : '');
   }
   return '<span class="st-dot ' + rt.status + '" style="display:inline-block"></span> ' + esc(rt.status === 'starting' ? 'Starting…' : rt.err || 'Not running');
 }
@@ -952,6 +1016,7 @@ async function openProps(sourceId, tab) {
     else if (a === 'mplay') mediaControl(s.id, 'toggle');
     else if (a === 'mrestart') mediaControl(s.id, 'restart');
     else if (a === 'canvasSize') { s.settings.w = coll.canvas.w; s.settings.h = coll.canvas.h; saveColl(); fill('props', true); }
+    else if (a === 'why') { healthDialog(s, 'black'); }
     else if (a === 'resetFilters') { s.filters = defFilters(); saveColl(); fill('filters', true); }
   });
   m.el.addEventListener('change', async e => {
@@ -1126,7 +1191,7 @@ function openLibrary() {
     if (!LIB.list.length) { box.innerHTML = head + '<p>No recordings yet. Press <b>Start Recording</b> to make one.</p>'; return; }
     box.innerHTML = head + '<div class="rec-list">' + LIB.list.map(r => {
       const url = LIB.urls.get(r.id), inFolder = r.where === 'folder' && FOLDER.handle && FOLDER.name === r.folder;
-      return '<div class="rec-item"><div class="ri-main"><b>' + esc(r.name) + '</b><small>' + esc(fmtDate(r.at)) + ' · ' + fmtDur(r.ms) + ' · ' + fmtSize(r.size) + '</small><small>' + esc(r.error ? 'Not saved: ' + r.error : r.where === 'folder' ? 'In the folder “' + r.folder + '”' : 'In Downloads') + '</small></div><div class="ri-btns">' +
+      return '<div class="rec-item"><div class="ri-main"><b>' + esc(r.name) + '</b><small>' + esc(fmtDate(r.at)) + ' · ' + fmtDur(r.ms) + ' · ' + fmtSize(r.size) + '</small><small>' + (r.black ? '⚠ Picture is black · ' : '') + esc(r.error ? 'Not saved: ' + r.error : r.where === 'folder' ? 'In the folder “' + r.folder + '”' : 'In Downloads') + '</small></div><div class="ri-btns">' +
         (url || inFolder ? '<button type="button" class="btn sm" data-lib="play" data-id="' + r.id + '">' + ic('play') + 'Play</button>' : '') +
         (url ? '<button type="button" class="btn sm" data-lib="dl" data-id="' + r.id + '">' + ic('download') + 'Download again</button>' : '') +
         '<button type="button" class="ib" data-lib="del" data-id="' + r.id + '" aria-label="Remove from list" title="Remove from this list (the file is not deleted)">' + ic('close') + '</button></div></div>';

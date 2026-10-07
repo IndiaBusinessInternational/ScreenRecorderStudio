@@ -2,7 +2,7 @@
 /* IBI Screen Recorder Studio — ENGINE: utilities, saved state, sources, audio mixer, compositor, recorder.
  * Everything runs in this browser tab; nothing is uploaded. ui.js draws the docks and dialogs on top of this. */
 const APP_NAME = 'IBI Screen Recorder Studio';
-const APP_VERSION = 'v1.0';
+const APP_VERSION = 'v1.1';
 
 /* ───────────── utilities ───────────── */
 const $ = (s, r) => (r || document).querySelector(s);
@@ -235,7 +235,7 @@ function teardown(rt) {
   if (rt.img && rt.img.remove) rt.img.remove();
   if (rt.url) URL.revokeObjectURL(rt.url);
   detachAudio(rt);
-  rt.stream = rt.reader = rt.frame = rt.video = rt.img = rt.url = rt.track = null; rt.w = rt.h = 0; rt.needsPlay = false;
+  rt.stream = rt.reader = rt.frame = rt.video = rt.img = rt.url = rt.track = null; rt.w = rt.h = 0; rt.needsPlay = false; rt.warn = ''; rt.blackSec = 0; rt.triedVideo = false; rt.path = '';
   rt.ending = false;
 }
 function noteNat(s, w, h) {
@@ -243,12 +243,16 @@ function noteNat(s, w, h) {
   if (!s.nat || s.nat.w !== w || s.nat.h !== h) { s.nat = { w, h }; saveColl(); }
   coll.scenes.forEach(sc => sc.items.forEach(it => { if (it.sourceId === s.id && it.fit) applyPendingFit(sc, it); }));
 }
+// Two independent ways to read a live video track. VideoFrames (MediaStreamTrackProcessor) are the fast path;
+// a <video> element is the classic path. The health check below switches a source to the <video> path by itself
+// if the fast path gives a black picture, and remembers that choice for this browser (v1.1).
+let PREFER_VIDEO = LS.get('drawPath', '') === 'video';
 function attachVideo(s, rt, track) {
-  rt.track = track;
-  if (CAN.mstp) {
+  rt.track = track; rt.path = '';
+  if (CAN.mstp && !PREFER_VIDEO) {
     try {
       const reader = new MediaStreamTrackProcessor({ track }).readable.getReader();
-      rt.reader = reader;
+      rt.reader = reader; rt.path = 'frames';
       (async () => {
         try {
           for (;;) {
@@ -263,13 +267,60 @@ function attachVideo(s, rt, track) {
       return;
     } catch (e) { rt.reader = null; }
   }
-  // Fallback (Firefox/Safari): a <video> kept inside the viewport so the browser never pauses it.
-  const v = document.createElement('video');
-  v.muted = true; v.playsInline = true; v.autoplay = true; v.srcObject = new MediaStream([track]);
-  v.addEventListener('resize', () => { rt.w = v.videoWidth; rt.h = v.videoHeight; noteNat(s, rt.w, rt.h); });
-  document.getElementById('hiddenMedia').appendChild(v); v.play().catch(() => {});
-  rt.video = v;
+  attachVideoElement(s, rt, track);
 }
+function attachVideoElement(s, rt, track) {
+  // A <video> kept inside the viewport (2 px, see .hidden-media) so the browser never pauses it. No autoplay
+  // attribute: Chrome pauses muted *autoplay* videos that it thinks are off screen.
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.srcObject = new MediaStream([track]);
+  v.addEventListener('resize', () => { if (v.videoWidth) { rt.w = v.videoWidth; rt.h = v.videoHeight; noteNat(s, rt.w, rt.h); } });
+  v.addEventListener('pause', () => { if (rt.video === v && !rt.ending) v.play().catch(() => {}); });
+  document.getElementById('hiddenMedia').appendChild(v); v.play().catch(() => { rt.needsPlay = true; });
+  rt.video = v; rt.path = 'video';
+}
+function switchToVideoPath(s, rt) {
+  if (!rt.track || rt.path === 'video' || rt.track.readyState !== 'live') return false;
+  rt.reader = null;                                   // the frame loop sees this and stops (the track itself keeps running)
+  if (rt.frame) { try { rt.frame.close(); } catch (e) {} rt.frame = null; }
+  attachVideoElement(s, rt, rt.track);
+  return true;
+}
+
+/* source health (v1.1): a screen or camera that sends a black picture is the classic Windows "black screen
+   capture" (laptops with two graphics chips, protected video, a minimised window). Check every second:
+   1) black on the fast path → switch to the <video> path once; 2) still black → warn the user with the fix. */
+const HC = document.createElement('canvas'); HC.width = 32; HC.height = 18;
+const hctx = HC.getContext('2d', { willReadFrequently: true });
+function lumaStats(src, sx, sy, sw, sh) {
+  try { hctx.clearRect(0, 0, 32, 18); hctx.drawImage(src, sx, sy, sw, sh, 0, 0, 32, 18); } catch (e) { return null; }
+  const d = hctx.getImageData(0, 0, 32, 18).data; let sum = 0, mx = 0;
+  for (let i = 0; i < d.length; i += 4) { const l = (d[i] * 2 + d[i + 1] * 5 + d[i + 2]) / 8; sum += l; if (l > mx) mx = l; }
+  return { mean: sum / (d.length / 4), max: mx };
+}
+let onHealth = () => {};
+function setHealthHook(fn) { onHealth = fn; }
+function checkSourceHealth() {
+  RT.forEach((rt, id) => {
+    const s = coll.sources[id];
+    if (!s || (s.type !== 'display' && s.type !== 'webcam') || rt.status !== 'live') return;
+    const d = drawableOf(s, rt);
+    if (!d) { rt.noFrame = (rt.noFrame || 0) + 1; return; }
+    rt.noFrame = 0;
+    const st = lumaStats(d.src, 0, 0, d.w, d.h);
+    const black = !st || st.max < 20;
+    rt.blackSec = black ? (rt.blackSec || 0) + 1 : 0;
+    if (rt.blackSec >= 3 && rt.path === 'frames') {
+      if (switchToVideoPath(s, rt)) { rt.blackSec = 0; rt.triedVideo = true; console.warn(s.name + ': black picture on the VideoFrame path — switched to the <video> path'); }
+      return;
+    }
+    if (!black && rt.path === 'video' && rt.triedVideo && !PREFER_VIDEO) { PREFER_VIDEO = true; LS.set('drawPath', 'video'); }
+    const warn = rt.blackSec >= 3 ? 'black' : '';
+    if (warn !== (rt.warn || '')) { rt.warn = warn; onSourcesChanged(); if (warn) onHealth(s, 'black'); }
+  });
+}
+setInterval(checkSourceHealth, 1000);
+
 async function startDisplay(s, rt) {
   if (!CAN.display) throw new Error('This browser cannot share the screen. Use Chrome or Edge on a computer.');
   const st = s.settings;
@@ -283,7 +334,7 @@ async function startDisplay(s, rt) {
   try { vt.contentHint = 'detail'; } catch (e) {}
   const cfg = vt.getSettings ? vt.getSettings() : {};
   rt.surface = cfg.displaySurface || ''; rt.label = vt.label || '';
-  vt.addEventListener('ended', () => { if (rt.stream === stream && !rt.ending) { stopSource(s.id); toast(s.name + ': screen sharing stopped.'); } });
+  vt.addEventListener('ended', () => { if (rt.stream === stream && !rt.ending) { stopSource(s.id); if (REC.state === 'recording' || REC.state === 'paused') onHealth(s, 'stopped'); else toast(s.name + ': screen sharing stopped.'); } });
   attachVideo(s, rt, vt);
   const at = stream.getAudioTracks()[0];
   if (at) attachAudio(s, rt, ac().createMediaStreamSource(new MediaStream([at])));
