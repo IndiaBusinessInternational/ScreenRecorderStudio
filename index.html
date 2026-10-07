@@ -29,13 +29,13 @@
 <meta name="twitter:description" content="Record your screen, webcam and microphone with scenes, an audio mixer, transitions and Studio Mode — right in the browser.">
 <meta name="twitter:image" content="https://recorder.indiabusinessinternational.online/og-banner.png">
 <meta name="color-scheme" content="dark light">
-<script src="theme.js?v=1.2"></script>
-<link rel="stylesheet" href="app.css?v=1.2">
+<script src="theme.js?v=2.0"></script>
+<link rel="stylesheet" href="app.css?v=2.0">
 </head>
 <body>
 <div class="app" id="app">
   <header class="top">
-    <span class="ver-badge" id="verBadge" title="IBI Screen Recorder Studio version">v1.2</span>
+    <span class="ver-badge" id="verBadge" title="IBI Screen Recorder Studio version">v2.0</span>
     <span class="brand">
       <img class="logo logo-l" src="logo-light.png" alt="India Business International" width="120" height="40">
       <img class="logo logo-d" src="logo-dark.png" alt="India Business International" width="120" height="40">
@@ -123,6 +123,7 @@
           <label class="field"><span>Duration</span>
             <span class="with-unit"><input id="trMs" type="number" min="50" max="20000" step="50" inputmode="numeric"><span class="unit">ms</span></span>
           </label>
+          <div id="trExtra"></div>
           <p class="hint" id="trHint">Used when you click a scene, and by the Transition button in Studio Mode.</p>
         </div>
       </div>
@@ -140,6 +141,10 @@
             <button type="button" class="btn" id="btnMini" data-act="mini" title="A small always-on-top window with the recording controls"><svg class="ic"><use href="#i-pip"/></svg><span>Mini Controls</span></button>
             <button type="button" class="btn" data-act="library"><svg class="ic"><use href="#i-list"/></svg><span>Recordings</span></button>
           </div>
+          <div class="ctl-row">
+            <button type="button" class="btn" id="btnReplay" data-act="replay" aria-pressed="false" title="Keep the last seconds in memory (OBS Replay Buffer)"><svg class="ic"><use href="#i-rec"/></svg><span id="btnReplayLab">Start Replay Buffer</span></button>
+            <button type="button" class="btn" id="btnSaveReplay" data-act="replaySave" disabled title="Save the last seconds as a file (Ctrl+Alt+B)"><svg class="ic"><use href="#i-download"/></svg><span>Save Replay</span></button>
+          </div>
           <button type="button" class="btn" data-act="settings"><svg class="ic"><use href="#i-settings"/></svg><span>Settings</span></button>
         </div>
       </div>
@@ -149,6 +154,7 @@
   <footer class="status" id="statusBar">
     <span class="st" id="stRec" title="Recording time"><svg class="ic"><use href="#i-rec"/></svg><span id="stRecTime">00:00:00</span></span>
     <span class="st" id="stSize" title="Recording size and bitrate">0 B · 0 kb/s</span>
+    <span class="st recording" id="stReplay" hidden></span>
     <span class="st" id="stDest" title="Where recordings are saved">Saves to: Downloads</span>
     <span class="st" id="stDrop" title="Frames the compositor could not draw on time">Dropped: 0 (0.0%)</span>
     <span class="st" id="stRender" title="Average time to draw one frame">Render: 0.0 ms</span>
@@ -217,7 +223,8 @@
   </defs>
 </svg>
 
-<script src="core.js?v=1.2"></script>
-<script src="ui.js?v=1.2"></script>
+<script src="core.js?v=2.0"></script>
+<script src="ui.js?v=2.0"></script>
+<script src="studio.js?v=2.0"></script>
 </body>
 </html>

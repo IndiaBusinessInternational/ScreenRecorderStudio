@@ -234,6 +234,40 @@ table.tbl th { color: var(--mut); font-weight: 600; }
 .stage-wrap:fullscreen .stage-lab, .stage-wrap:fullscreen .overlay, .stage-wrap:fullscreen .ov-dom { display: none; }
 .overlay.passive { pointer-events: none; }
 
+/* ── v2.0: help assistant, multiview ── */
+.help-fab { position: fixed; right: 16px; bottom: 44px; z-index: 40; width: 52px; height: 52px; border-radius: 50%; border: 0; background: var(--acc); color: var(--acc-ink); box-shadow: var(--shadow); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.help-fab .ic { width: 26px; height: 26px; }
+.help-fab .pip { position: absolute; top: -3px; right: -3px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--rec); color: #fff; font: 700 12px/22px system-ui, sans-serif; }
+.help-panel { position: fixed; right: 16px; bottom: 44px; z-index: 41; width: min(400px, calc(100vw - 32px)); height: min(560px, calc(100dvh - 120px)); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+.hp-h { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; background: var(--panel2); border-bottom: 1px solid var(--line); }
+.hp-h .ic { color: var(--acc); }
+.hp-h .ib { font-size: 18px; }
+.hp-log { flex: 1 1 auto; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.hp-msg { max-width: 92%; padding: 9px 12px; border-radius: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.hp-msg.bot { background: var(--panel2); border: 1px solid var(--line); align-self: flex-start; border-bottom-left-radius: 4px; }
+.hp-msg.me { background: var(--acc); color: var(--acc-ink); align-self: flex-end; border-bottom-right-radius: 4px; }
+.hp-msg ol, .hp-msg ul { margin: 6px 0; padding-left: 20px; }
+.hp-chips, .hp-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.hp-chip { border: 1px solid var(--acc); color: var(--acc); background: transparent; border-radius: 999px; padding: 6px 11px; cursor: pointer; font-size: 13px; text-align: left; }
+.hp-chip:hover { background: var(--acc); color: var(--acc-ink); }
+.hp-f { display: flex; gap: 6px; padding: 10px; border-top: 1px solid var(--line); }
+.hp-f input { flex: 1 1 auto; min-width: 0; min-height: 38px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--txt); }
+.mv-modal { width: min(1200px, 100%) !important; }
+.hk-btns { display: flex; flex-wrap: wrap; gap: 4px; }
+table.tbl td, table.tbl th { overflow-wrap: anywhere; }
+table.tbl kbd { white-space: normal; }
+.mv-top { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.mv-big, .mv-tile { position: relative; display: block; width: 100%; padding: 0; border: 3px solid var(--line); border-radius: 6px; background: #000; overflow: hidden; color: #fff; cursor: pointer; }
+.mv-big { cursor: default; }
+.mv-big:first-child { border-color: var(--ok); } .mv-big:last-child { border-color: var(--rec); }
+.mv-big canvas, .mv-tile canvas { display: block; width: 100%; height: auto; }
+.mv-big span, .mv-tile span { position: absolute; left: 0; bottom: 0; right: 0; padding: 3px 8px; background: rgba(0,0,0,.65); font-size: 13px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mv-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.mv-tile.pv { border-color: var(--ok); } .mv-tile.pg { border-color: var(--rec); }
+.mv-modal:fullscreen { width: 100% !important; max-height: none; height: 100%; border-radius: 0; }
+#btnReplay[aria-pressed="true"] { background: var(--sel); color: var(--sel-txt); border-color: var(--acc); }
+#btnReplay[aria-pressed="true"] .ic { color: var(--rec); }
+
 /* ── tablet ── */
 @media (max-width: 1180px) {
   body { overflow: auto; }
@@ -287,6 +321,11 @@ table.tbl th { color: var(--mut); font-weight: 600; }
   .install-banner .btn { flex: 1 1 0; }
   .toasts { bottom: 16px; }
   .countdown span { font-size: 110px; }
+  .help-fab { bottom: 16px; right: 12px; }
+  .help-panel { right: 0; bottom: 0; width: 100%; height: 80dvh; border-radius: 14px 14px 0 0; border-width: 1px 0 0; }
+  .hp-f input { font-size: 16px; }
+  .mv-top { grid-template-columns: minmax(0, 1fr); }
+  .mv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 430px) {
   .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }

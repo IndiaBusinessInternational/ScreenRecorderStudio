@@ -5,7 +5,8 @@ const ic = n => '<svg class="ic"><use href="#i-' + n + '"/></svg>';
 const SEL = { item: null };                       // selected scene-item id in the scene being edited
 const isPhone = () => matchMedia('(max-width: 700px)').matches;
 const typing = el => !!(el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)));
-const LIVE_TYPES = ['display', 'webcam', 'mic'];
+const LIVE_TYPES = ['display', 'webcam', 'mic', 'captions'];
+const FILE_TYPES = ['image', 'media', 'slideshow'];
 function audioCapable(s) { return s.type === 'mic' || s.type === 'media' || (s.type === 'display' && s.settings.audio); }
 
 /* ───────────── dialogs & menus ───────────── */
@@ -123,7 +124,7 @@ function rebuildPlaceholders() {
   sc.items.forEach(it => {
     const s = coll.sources[it.sourceId]; if (!s || !it.visible || !SOURCE_TYPES[s.type].video) return;
     const rt = rtOf(s.id);
-    const needsFile = (s.type === 'image' || s.type === 'media') && rt.status !== 'live';
+    const needsFile = FILE_TYPES.includes(s.type) && rt.status !== 'live';
     const needsStart = (s.type === 'display' || s.type === 'webcam') && rt.status !== 'live';
     if (!needsFile && !needsStart) return;
     const b = itemBox(it), d = document.createElement('div');
@@ -139,7 +140,7 @@ function rebuildPlaceholders() {
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-ph]'); if (!b) return;
   const s = coll.sources[b.dataset.ph]; if (!s) return;
-  if (s.type === 'image' || s.type === 'media') openProps(s.id, 'props'); else startSource(s.id);
+  if (FILE_TYPES.includes(s.type)) openProps(s.id, 'props'); else startSource(s.id);
 });
 
 /* ───────────── scenes dock ───────────── */
@@ -177,6 +178,7 @@ function sceneMenu(id, at) {
     coll.studio ? { label: 'Send to Program', icon: 'arrow', run: () => { coll.preview = id; doTransition(); } } : null,
     { label: 'Rename', icon: 'text', hint: 'F2', run: () => renameScene(id) },
     { label: 'Duplicate', icon: 'copy', run: () => duplicateScene(id) },
+    { label: 'Transition override…' + (sceneById(id).tr ? ' (' + TRANSITIONS[sceneById(id).tr.type] + ')' : ''), icon: 'arrow', run: () => transitionOverrideDialog(id) },
     { label: 'Move up', icon: 'up', disabled: i === 0, run: () => moveScene(id, -1) },
     { label: 'Move down', icon: 'down', disabled: i === coll.scenes.length - 1, run: () => moveScene(id, 1) },
     { sep: true },
@@ -231,14 +233,14 @@ function renderSources() {
   const ul = $('#sourceList'), sc = editScene();
   if (!sc || !sc.items.length) { ul.innerHTML = '<li class="empty">No sources yet. Click <b>+</b> below to add your screen, camera, microphone, an image or text.</li>'; return; }
   ul.innerHTML = sc.items.map(it => {
-    const s = coll.sources[it.sourceId], T = SOURCE_TYPES[s.type], rt = rtOf(s.id);
-    const live = LIVE_TYPES.includes(s.type) || s.type === 'image' || s.type === 'media';
+    const s = coll.sources[it.sourceId], T = { label: typeLabel(s), icon: typeIcon(s) }, rt = rtOf(s.id);
+    const live = LIVE_TYPES.includes(s.type) || FILE_TYPES.includes(s.type);
     const needs = live && rt.status !== 'live' && rt.status !== 'starting';
     return '<li role="option" tabindex="-1" draggable="true" data-item="' + it.id + '" class="' + (it.id === SEL.item ? 'sel' : '') + (it.visible ? '' : ' hid') + '" aria-selected="' + (it.id === SEL.item) + '" title="' + esc(T.label + (rt.err ? ' — ' + rt.err : '')) + '">' +
       ic(T.icon) + (live ? '<span class="st-dot ' + rt.status + '" aria-label="' + rt.status + '"></span>' : '') +
       '<span class="nm">' + esc(s.name) + '</span>' +
       (rt.warn ? '<button type="button" class="ib warn" data-row="warn" aria-label="Problem with ' + esc(s.name) + '" title="Black picture — click for the fix">' + ic('warn') + '</button>' : '') +
-      (needs ? '<button type="button" class="btn sm" data-row="start">' + ((s.type === 'image' || s.type === 'media') ? 'File' : 'Start') + '</button>' : '') +
+      (needs ? '<button type="button" class="btn sm" data-row="start">' + (FILE_TYPES.includes(s.type) ? 'File' : 'Start') + '</button>' : '') +
       '<button type="button" class="ib ' + (it.visible ? '' : 'off') + '" data-row="vis" aria-label="' + (it.visible ? 'Hide' : 'Show') + ' ' + esc(s.name) + '" title="' + (it.visible ? 'Hide' : 'Show') + '">' + ic(it.visible ? 'eye' : 'eyeoff') + '</button>' +
       '<button type="button" class="ib ' + (it.locked ? 'on' : 'off') + '" data-row="lock" aria-label="' + (it.locked ? 'Unlock' : 'Lock') + ' ' + esc(s.name) + '" title="' + (it.locked ? 'Unlock' : 'Lock') + '">' + ic(it.locked ? 'lock' : 'unlock') + '</button>' +
       '<button type="button" class="ib" data-row="more" aria-label="Options for ' + esc(s.name) + '">' + ic('dots') + '</button></li>';
@@ -253,7 +255,7 @@ $('#sourceList').addEventListener('click', e => {
   if (b.dataset.row === 'vis') { it.visible = !it.visible; updateGates(0); saveColl(); renderSources(); renderMixer(true); rebuildPlaceholders(); }
   else if (b.dataset.row === 'warn') { healthDialog(s, 'black'); }
   else if (b.dataset.row === 'lock') { it.locked = !it.locked; saveColl(); renderSources(); }
-  else if (b.dataset.row === 'start') { selectItem(it.id); if (s.type === 'image' || s.type === 'media') openProps(s.id, 'props'); else startSource(s.id); }
+  else if (b.dataset.row === 'start') { selectItem(it.id); if (FILE_TYPES.includes(s.type)) openProps(s.id, 'props'); else startSource(s.id); }
   else if (b.dataset.row === 'more') { selectItem(it.id); itemMenu(it, b); }
 });
 $('#sourceList').addEventListener('dblclick', e => { const li = e.target.closest('[data-item]'); if (!li || e.target.closest('button')) return; const it = editScene().items.find(x => x.id === li.dataset.item); if (it) openProps(it.sourceId, 'props'); });
@@ -331,6 +333,10 @@ function itemMenu(it, at) {
     T.video ? { label: 'Flip vertical', icon: 'layout', run: tf('flipV') } : null,
     T.video ? { label: 'Reset transform', icon: 'close', hint: 'Ctrl+R', run: tf('reset') } : null,
     s.type === 'webcam' ? { label: 'Webcam bubble (circle, bottom-right)', icon: 'webcam', run: () => webcamBubble(it) } : null,
+    { label: 'Copy transform', icon: 'copy', run: () => copyTransform(it) },
+    CLIP.transform && T.video ? { label: 'Paste transform', icon: 'copy', run: () => pasteTransform(it) } : null,
+    T.video ? { label: 'Copy filters', icon: 'filter', run: () => copyFilters(s) } : null,
+    CLIP.filters && T.video ? { label: 'Paste filters', icon: 'filter', run: () => pasteFilters(s) } : null,
     { header: 'Order' },
     { label: 'Move to top', icon: 'up', disabled: i === 0, run: () => moveItem(it, 'top') },
     { label: 'Move up', icon: 'up', disabled: i === 0, run: () => moveItem(it, 'up') },
@@ -344,18 +350,26 @@ function itemMenu(it, at) {
 }
 
 /* add source: pick a type, then "create new" or "add existing" (the OBS flow) */
+const ADD_LIST = [
+  ['display', 'monitor', 'Display Capture', 'monitor', 'Your whole screen (choose “Entire screen”), with system sound'],
+  ['display', 'window', 'Window Capture', 'layout', 'One app window only — other windows, the sharing bar and Mini Controls stay out of the video'],
+  ['display', 'browser', 'Chrome Tab Capture', 'list', 'One browser tab, with its sound — keeps recording when you switch tabs'],
+  ['webcam'], ['mic'], ['media'], ['image'], ['slideshow'], ['text'], ['captions'], ['color'], ['scene'],
+];
 function addSourceDialog() {
   const m = modal({
     title: 'Add Source', wide: true,
-    body: '<div class="type-grid">' + Object.keys(SOURCE_TYPES).map(t => {
-      const T = SOURCE_TYPES[t], off = (t === 'display' && !CAN.display) || ((t === 'webcam' || t === 'mic') && !CAN.media);
-      return '<button type="button" data-type="' + t + '"' + (off ? ' disabled' : '') + '>' + ic(T.icon) + '<span><b>' + esc(T.label) + '</b><small>' + esc(off ? (t === 'display' ? 'Phones and tablets cannot share the screen from a browser — use a computer.' : 'Not available in this browser.') : T.desc) + '</small></span></button>';
+    body: '<div class="type-grid">' + ADD_LIST.map(([t, surf, label, icon, desc]) => {
+      const T = SOURCE_TYPES[t];
+      const off = (t === 'display' && !CAN.display) || ((t === 'webcam' || t === 'mic') && !CAN.media) || (t === 'captions' && !(window.SpeechRecognition || window.webkitSpeechRecognition)) || (t === 'scene' && coll.scenes.length < 2);
+      const why = t === 'display' ? 'Phones and tablets cannot share the screen from a browser — use a computer.' : t === 'scene' ? 'Add a second scene first.' : 'Not available in this browser.';
+      return '<button type="button" data-type="' + t + '" data-surface="' + (surf || '') + '"' + (off ? ' disabled' : '') + '>' + ic(icon || T.icon) + '<span><b>' + esc(label || T.label) + '</b><small>' + esc(off ? why : (desc || T.desc)) + '</small></span></button>';
     }).join('') + '</div>',
   });
-  $$('[data-type]', m.el).forEach(b => b.addEventListener('click', () => { m.close(); createSourceDialog(b.dataset.type); }));
+  $$('[data-type]', m.el).forEach(b => b.addEventListener('click', () => { m.close(); createSourceDialog(b.dataset.type, b.dataset.surface); }));
 }
-function createSourceDialog(type) {
-  const T = SOURCE_TYPES[type], sc = editScene();
+function createSourceDialog(type, surface) {
+  const T = { label: surface ? SURFACES[surface] : SOURCE_TYPES[type].label }, sc = editScene();
   const existing = Object.values(coll.sources).filter(s => s.type === type && !sc.items.some(it => it.sourceId === s.id));
   const m = modal({
     title: 'Create / Select Source — ' + T.label,
@@ -379,18 +393,20 @@ function createSourceDialog(type) {
     } else {
       const nm = nameIn.value.trim(); if (!nm) { nameIn.focus(); toast('Please type a name.'); return; }
       s = makeSource(type, uniqueSourceName(nm)); coll.sources[s.id] = s;
+      if (type === 'display' && surface) s.settings.surface = surface;
+      if (type === 'scene') { const other = coll.scenes.find(x => x.id !== sc.id); s.settings.sceneId = other ? other.id : ''; }
       const hasVisual = sc.items.some(x => SOURCE_TYPES[coll.sources[x.sourceId].type].video);
-      const fit = type === 'display' || type === 'media' ? 'fit' : type === 'webcam' ? (hasVisual ? 'corner' : 'fit') : type === 'image' ? 'fitIfLarge' : false;
+      const fit = type === 'display' || type === 'media' || type === 'slideshow' ? 'fit' : type === 'webcam' ? (hasVisual ? 'corner' : 'fit') : type === 'image' ? 'fitIfLarge' : false;
       it = makeItem(s.id, { fit });
     }
     it.visible = vis;
     if (type === 'color') sc.items.push(it); else sc.items.unshift(it);
     if (type === 'text') transformItem(it, 'center');
-    if (type === 'color') rtOf(s.id).status = 'live';
-    if (type === 'text') rtOf(s.id).status = 'live';
+    if (type === 'captions') { const b = itemBox(it); it.x = Math.round((coll.canvas.w - b.w) / 2); it.y = Math.round(coll.canvas.h - b.h - coll.canvas.h * 0.06); }
+    if (ALWAYS_LIVE.includes(type)) rtOf(s.id).status = 'live';
     m.close(); SEL.item = it.id; saveColl(); updateGates(0); renderAll();
     if (mode !== 'old') {
-      if (type === 'display' || type === 'webcam' || type === 'mic') startSource(s.id).then(okd => { if (okd && type !== 'display') openProps(s.id, 'props'); });
+      if (type === 'display' || type === 'webcam' || type === 'mic' || type === 'captions') startSource(s.id).then(okd => { if (okd && type !== 'display') openProps(s.id, 'props'); });
       else openProps(s.id, 'props');
     }
   };
@@ -516,8 +532,11 @@ function drawMeters() {
 
 /* ───────────── transitions dock ───────────── */
 function renderTransitions() {
-  $('#trType').value = coll.transition.type; $('#trMs').value = coll.transition.ms;
+  const sel = $('#trType');
+  if (sel.options.length !== Object.keys(TRANSITIONS).length) sel.innerHTML = Object.keys(TRANSITIONS).map(k => '<option value="' + k + '">' + esc(TRANSITIONS[k]) + '</option>').join('');
+  sel.value = coll.transition.type; $('#trMs').value = coll.transition.ms;
   $('#trMs').disabled = coll.transition.type === 'cut';
+  if (typeof renderTransitionExtras === 'function') renderTransitionExtras();
 }
 $('#trType').addEventListener('change', e => { coll.transition.type = TRANSITIONS[e.target.value] ? e.target.value : 'fade'; saveColl(); renderTransitions(); });
 $('#trMs').addEventListener('change', e => { coll.transition.ms = clamp(Math.round(+e.target.value || 300), 50, 20000); e.target.value = coll.transition.ms; saveColl(); });
@@ -835,7 +854,7 @@ const FLD = {
   text: (k, label, v) => '<label class="field"><span>' + esc(label) + '</span><input type="text" data-k="' + k + '" value="' + esc(v) + '"></label>',
   area: (k, label, v) => '<label class="field"><span>' + esc(label) + '</span><textarea data-k="' + k + '" rows="3">' + esc(v) + '</textarea></label>',
 };
-const RESTART_KEYS = { display: ['settings.audio', 'settings.cursor'], webcam: ['settings.deviceId', 'settings.res', 'settings.fps', 'settings.facing'], mic: ['settings.deviceId', 'settings.ns', 'settings.ec', 'settings.agc'] };
+const RESTART_KEYS = { captions: ['settings.lang'], display: ['settings.audio', 'settings.cursor'], webcam: ['settings.deviceId', 'settings.res', 'settings.fps', 'settings.facing'], mic: ['settings.deviceId', 'settings.ns', 'settings.ec', 'settings.agc'] };
 async function deviceOptions(kind) {
   try { const list = await navigator.mediaDevices.enumerateDevices(); return list.filter(d => d.kind === kind); } catch (e) { return []; }
 }
@@ -843,7 +862,7 @@ function statusLine(s) {
   const rt = rtOf(s.id);
   if (rt.status === 'live') {
     const res = rt.w ? ' · ' + rt.w + '×' + rt.h : '';
-    const what = s.type === 'display' ? ({ monitor: 'Entire screen', window: 'Window', browser: 'Browser tab' }[rt.surface] || 'Shared') : s.type === 'webcam' ? 'Camera on' : 'Microphone on';
+    const what = s.type === 'display' ? ({ monitor: 'Entire screen', window: 'Window', browser: 'Browser tab' }[rt.surface] || 'Shared') : s.type === 'webcam' ? 'Camera on' : s.type === 'captions' ? 'Listening (' + s.settings.lang + ')' : 'Microphone on';
     return '<span class="st-dot live" style="display:inline-block"></span> ' + esc(what + (rt.label ? ': ' + rt.label : '') + res) + (s.type === 'display' ? (rt.hasAudio ? ' · with sound' : ' · no sound') : '') +
       (rt.path === 'video' && rt.triedVideo ? ' · compatibility mode' : '') +
       (rt.warn === 'black' ? '<br><span class="note warn">⚠ The picture is black. <button type="button" class="btn sm" data-p="why">Why and how to fix</button></span>' : '');
@@ -855,6 +874,7 @@ async function propsBody(s, it) {
   let h = '';
   if (s.type === 'display') {
     h += '<div class="sect"><p id="pStatus">' + statusLine(s) + '</p><div class="btn-row" id="pCapBtns"></div></div>' +
+      FLD.select(k + 'surface', 'Open the share box on', st.surface, [['', 'Ask every time'], ['monitor', 'Entire screen'], ['window', 'Window'], ['browser', 'Chrome tab']]) +
       FLD.check(k + 'audio', 'Capture audio (the tab’s sound, or Windows system sound when sharing the entire screen)', st.audio) +
       FLD.select(k + 'cursor', 'Mouse cursor', st.cursor, [['always', 'Always show'], ['motion', 'Show only while moving'], ['never', 'Hide']]) +
       '<p class="note">Changes apply the next time capture starts. In the share picker tick <b>Also share system audio</b> (Entire screen) or <b>Also share tab audio</b> (Chrome tab) to record sound. Chrome shows a “sharing” bar — you can hide it; recording continues.</p>';
@@ -889,6 +909,22 @@ async function propsBody(s, it) {
       '<div class="grid2">' + FLD.color(k + 'color', 'Colour', st.color) + FLD.color(k + 'outlineColor', 'Outline colour', st.outlineColor) + '</div>' +
       FLD.range(k + 'outlineW', 'Outline width', st.outlineW, 0, 20, 1, ' px') +
       '<div class="grid2">' + FLD.color(k + 'bg', 'Background', st.bg) + '</div>' + FLD.range(k + 'bgOpacity', 'Background opacity', st.bgOpacity, 0, 100, 1, '%');
+  } else if (s.type === 'slideshow') {
+    h += '<div class="sect"><p>' + (st.files.length ? '<b>' + st.files.length + ' image' + (st.files.length > 1 ? 's' : '') + '</b>: ' + esc(st.files.slice(0, 6).join(', ') + (st.files.length > 6 ? '…' : '')) : 'No images chosen yet.') + '</p>' +
+      '<div class="btn-row"><button type="button" class="btn primary" data-p="file">' + ic('folder') + 'Choose images…</button></div><input type="file" id="pFile" hidden multiple accept="image/*"><p class="note">Pick several images at once (Ctrl+click). They are kept in this browser.</p></div>' +
+      '<div class="grid2">' + FLD.num(k + 'interval', 'Show each image for', st.interval, { min: 1, max: 600, unit: 's' }) + FLD.num(k + 'fadeMs', 'Fade between images', st.fadeMs, { min: 0, max: 5000, step: 100, unit: 'ms' }) + '</div>' +
+      FLD.check(k + 'loop', 'Loop', st.loop) + FLD.check(k + 'random', 'Random order', st.random) +
+      '<div class="grid2">' + FLD.num(k + 'w', 'Bounding width', st.w, { min: 16, max: 7680, unit: 'px' }) + FLD.num(k + 'h', 'Bounding height', st.h, { min: 16, max: 7680, unit: 'px' }) + '</div>';
+  } else if (s.type === 'scene') {
+    h += FLD.select(k + 'sceneId', 'Show this scene inside the current one', st.sceneId, coll.scenes.map(x => [x.id, x.name])) +
+      '<p class="note">Changes to that scene appear here too (OBS “nested scene”). A scene cannot contain itself.</p>';
+  } else if (s.type === 'captions') {
+    h += '<div class="sect"><p id="pStatus">' + statusLine(s) + '</p><div class="btn-row" id="pCapBtns"></div></div>' +
+      FLD.select(k + 'lang', 'Spoken language', st.lang, [['en-IN', 'English (India)'], ['en-US', 'English (US)'], ['en-GB', 'English (UK)'], ['ta-IN', 'Tamil'], ['hi-IN', 'Hindi'], ['te-IN', 'Telugu'], ['ml-IN', 'Malayalam'], ['kn-IN', 'Kannada'], ['bn-IN', 'Bengali'], ['mr-IN', 'Marathi'], ['gu-IN', 'Gujarati'], ['ar-SA', 'Arabic'], ['fr-FR', 'French'], ['de-DE', 'German'], ['es-ES', 'Spanish'], ['ja-JP', 'Japanese'], ['zh-CN', 'Chinese']]) +
+      '<div class="grid2">' + FLD.num(k + 'keepSec', 'Keep each line for', st.keepSec, { min: 2, max: 30, unit: 's' }) + FLD.num(k + 'maxChars', 'Characters per line', st.maxChars, { min: 16, max: 120 }) + '</div>' +
+      '<div class="grid2">' + FLD.select(k + 'font', 'Font', st.font, ['Segoe UI', 'Arial', 'Calibri', 'Verdana', 'Tahoma', 'Nirmala UI', 'Montserrat'].map(f => [f, f])) + FLD.num(k + 'size', 'Size', st.size, { min: 12, max: 200, unit: 'px' }) + '</div>' +
+      '<div class="grid2">' + FLD.color(k + 'color', 'Text colour', st.color) + FLD.color(k + 'bg', 'Background', st.bg) + '</div>' + FLD.range(k + 'bgOpacity', 'Background opacity', st.bgOpacity, 0, 100, 1, '%') +
+      '<p class="note">Captions use the browser’s speech recognition: Chrome sends the speech to Google to turn it into text. They listen to the default microphone.</p>';
   } else if (s.type === 'color') {
     h += FLD.color(k + 'color', 'Colour', st.color) + '<div class="grid2">' + FLD.num(k + 'w', 'Width', st.w, { min: 1, max: 7680, unit: 'px' }) + FLD.num(k + 'h', 'Height', st.h, { min: 1, max: 7680, unit: 'px' }) + '</div>' +
       '<div class="btn-row"><button type="button" class="btn" data-p="canvasSize">Use canvas size (' + coll.canvas.w + '×' + coll.canvas.h + ')</button></div>';
@@ -911,6 +947,10 @@ function filtersBody(s) {
     FLD.select('chroma.preset', 'Key colour', ['#00ff00', '#0000ff', '#ff00ff'].includes(c.color) ? c.color : 'custom', [['#00ff00', 'Green'], ['#0000ff', 'Blue'], ['#ff00ff', 'Magenta'], ['custom', 'Custom']]) + FLD.color('chroma.color', 'Custom colour', c.color) +
     FLD.range('chroma.similarity', 'Similarity', c.similarity, 1, 1000, 1) + FLD.range('chroma.smoothness', 'Smoothness', c.smoothness, 1, 1000, 1) + FLD.range('chroma.spill', 'Key colour spill reduction', c.spill, 1, 1000, 1) +
     '<p class="note">Chroma key is worked out on the processor — use it on a webcam-sized source.</p></div>' +
+    '<div class="sect"><h3>Color key</h3>' + FLD.check('colorKey.on', 'Remove one exact colour (e.g. a solid background)', f.colorKey.on) + FLD.color('colorKey.color', 'Key colour', f.colorKey.color) + FLD.range('colorKey.similarity', 'Similarity', f.colorKey.similarity, 1, 1000, 1) + FLD.range('colorKey.smoothness', 'Smoothness', f.colorKey.smoothness, 1, 1000, 1) + '</div>' +
+    '<div class="sect"><h3>Luma key</h3>' + FLD.check('lumaKey.on', 'Make dark or bright areas transparent', f.lumaKey.on) + FLD.range('lumaKey.min', 'Remove darker than', f.lumaKey.min, 0, 100, 1, '%') + FLD.range('lumaKey.max', 'Remove brighter than', f.lumaKey.max, 0, 100, 1, '%') + FLD.range('lumaKey.smooth', 'Smoothness', f.lumaKey.smooth, 0, 50, 1, '%') + '</div>' +
+    '<div class="sect"><h3>Sharpen, scroll and blending</h3>' + FLD.range(k + 'sharpen', 'Sharpen', f.sharpen, 0, 100, 1, '%') + FLD.range(k + 'scrollX', 'Scroll horizontally', f.scrollX, -500, 500, 5, ' px/s') + FLD.range(k + 'scrollY', 'Scroll vertically', f.scrollY, -500, 500, 5, ' px/s') +
+    FLD.select(k + 'blend', 'Blending mode', f.blend, [['source-over', 'Normal'], ['lighter', 'Additive'], ['difference', 'Subtract (difference)'], ['screen', 'Screen'], ['multiply', 'Multiply'], ['overlay', 'Overlay'], ['darken', 'Darken'], ['lighten', 'Lighten']]) + '</div>' +
     '<div class="btn-row"><button type="button" class="btn" data-p="resetFilters">Reset all filters</button></div>';
 }
 function audioBody(s) {
@@ -920,7 +960,14 @@ function audioBody(s) {
     FLD.range('audio.gainDb', 'Gain (boost a quiet microphone)', a.gainDb, -30, 30, 0.5, ' dB') +
     FLD.check('audio.mono', 'Downmix to mono (fixes a voice heard only on one side)', a.mono) +
     FLD.select('audio.monitor', 'Audio monitoring', a.monitor ? '1' : '', [['', 'Monitor off'], ['1', 'Monitor and output (hear it on this computer)']]) +
-    '<p class="note">Meters: green is safe, yellow (−20 to −9 dB) is good speech, red (above −9 dB) risks distortion.</p>';
+    FLD.range('audio.balance', 'Balance (left ← → right)', a.balance, -1, 1, 0.05, '') +
+    FLD.range('audio.syncMs', 'Sync offset (delay the sound)', a.syncMs, 0, 2000, 10, ' ms') +
+    FLD.check('audio.invert', 'Invert polarity', a.invert) +
+    '<div class="sect"><h3>Noise gate</h3>' + FLD.check('gate.on', 'Silence the microphone between words', a.gate.on) + '<div class="grid2">' + FLD.num('gate.open', 'Open threshold', a.gate.open, { min: -96, max: 0, unit: 'dB' }) + FLD.num('gate.close', 'Close threshold', a.gate.close, { min: -96, max: 0, unit: 'dB' }) + FLD.num('gate.attack', 'Attack', a.gate.attack, { min: 1, max: 500, unit: 'ms' }) + FLD.num('gate.hold', 'Hold', a.gate.hold, { min: 1, max: 2000, unit: 'ms' }) + FLD.num('gate.release', 'Release', a.gate.release, { min: 1, max: 2000, unit: 'ms' }) + '</div></div>' +
+    '<div class="sect"><h3>Compressor</h3>' + FLD.check('comp.on', 'Even out loud and soft speech', a.comp.on) + '<div class="grid2">' + FLD.num('comp.ratio', 'Ratio', a.comp.ratio, { min: 1, max: 20, step: 0.5, unit: ':1' }) + FLD.num('comp.threshold', 'Threshold', a.comp.threshold, { min: -60, max: 0, unit: 'dB' }) + FLD.num('comp.attack', 'Attack', a.comp.attack, { min: 0, max: 500, unit: 'ms' }) + FLD.num('comp.release', 'Release', a.comp.release, { min: 1, max: 1000, unit: 'ms' }) + FLD.num('comp.gain', 'Output gain', a.comp.gain, { min: -32, max: 32, unit: 'dB' }) + '</div></div>' +
+    '<div class="sect"><h3>Limiter</h3>' + FLD.check('limit.on', 'Never go above the threshold (stops clipping)', a.limit.on) + '<div class="grid2">' + FLD.num('limit.threshold', 'Threshold', a.limit.threshold, { min: -60, max: 0, unit: 'dB' }) + FLD.num('limit.release', 'Release', a.limit.release, { min: 1, max: 1000, unit: 'ms' }) + '</div></div>' +
+    '<div class="sect"><h3>3-band equalizer</h3>' + FLD.check('eq.on', 'Equalizer on', a.eq.on) + FLD.range('eq.low', 'Low (bass)', a.eq.low, -20, 20, 0.5, ' dB') + FLD.range('eq.mid', 'Mid', a.eq.mid, -20, 20, 0.5, ' dB') + FLD.range('eq.high', 'High (treble)', a.eq.high, -20, 20, 0.5, ' dB') + '</div>' +
+    '<p class="note">Meters: green is safe, yellow (−20 to −9 dB) is good speech, red (above −9 dB) risks distortion. Filters run in OBS order: sync → polarity → EQ → gate → compressor → limiter → volume → balance.</p>';
 }
 async function openProps(sourceId, tab) {
   const s = coll.sources[sourceId]; if (!s) return;
@@ -971,7 +1018,7 @@ async function openProps(sourceId, tab) {
       ? (s.type === 'display' ? '<button type="button" class="btn" data-p="restart">' + ic('monitor') + 'Change what is shared…</button>' : '') + '<button type="button" class="btn" data-p="stop">' + ic('stop') + (s.type === 'display' ? 'Stop capture' : 'Turn off') + '</button>'
       : '<button type="button" class="btn primary" data-p="start">' + ic('play') + (s.type === 'display' ? 'Start capture' : 'Turn on') + '</button>';
   }
-  const objFor = key => { const [o] = key.split('.'); return o === 'settings' ? s.settings : o === 'filters' ? s.filters : o === 'chroma' ? s.filters.chroma : o === 'audio' ? s.audio : o === 'item' ? it : o === 'crop' ? it.crop : null; };
+  const objFor = key => { const [o] = key.split('.'); return o === 'settings' ? s.settings : o === 'filters' ? s.filters : ['chroma', 'colorKey', 'lumaKey'].includes(o) ? s.filters[o] : o === 'audio' ? s.audio : ['gate', 'comp', 'limit', 'eq'].includes(o) ? s.audio[o] : o === 'item' ? it : o === 'crop' ? it.crop : null; };
   function onField(el, final) {
     const key = el.dataset.k; if (!key) return;
     const prop = key.split('.')[1];
@@ -992,7 +1039,9 @@ async function openProps(sourceId, tab) {
     if (key === 'chroma.color') { const ps = $('[data-k="chroma.preset"]', m.el); if (ps) ps.value = ['#00ff00', '#0000ff', '#ff00ff'].includes(v) ? v : 'custom'; }
     if (key === 'filters.shape' && v === 'circle' && it && s.type === 'webcam' && !it.crop.l && !it.crop.r && !it.crop.t && !it.crop.b) { webcamBubble(it); fill('transform', true); }
     if (key === 'settings.loop' && rtOf(s.id).video) rtOf(s.id).video.loop = !!v;
-    if (key.startsWith('audio.')) { applyAudio(s.id); renderMixer(); syncMini(); }
+    if (/^(audio|gate|comp|limit|eq)\./.test(key)) { applyAudio(s.id); renderMixer(); syncMini(); }
+    if (s.type === 'slideshow' && /^settings\.(w|h|random)$/.test(key)) rtOf(s.id).sKey = '';
+    if (key === 'settings.sceneId' && sceneById(v) === editScene()) toast('A scene cannot contain itself — it will stay empty here.', 'err');
     if (key.startsWith('item.') || key.startsWith('crop.')) it.fit = false;
     if ((RESTART_KEYS[s.type] || []).includes(key)) {
       needRestart = true; clearTimeout(restartT);
@@ -1022,6 +1071,15 @@ async function openProps(sourceId, tab) {
   m.el.addEventListener('change', async e => {
     if (e.target.id !== 'pFile') return;
     const f = e.target.files && e.target.files[0]; if (!f) return;
+    if (s.type === 'slideshow') {
+      const files = Array.from(e.target.files).filter(x => /^image\//.test(x.type)).slice(0, 200);
+      try {
+        for (let i = 0; i < Math.max(files.length, (s.settings.files || []).length); i++) { if (files[i]) await idb.set('blobs', s.id + '#' + i, files[i]); else await idb.del('blobs', s.id + '#' + i); }
+        s.settings.files = files.map(x => x.name); fileChanged = true;
+        stopSource(s.id); await startSource(s.id); saveColl(); fill('props', true);
+      } catch (er) { toast('Could not keep those images in this browser: ' + er.message, 'err'); }
+      return;
+    }
     try {
       await idb.set('blobs', s.id, f);
       s.settings.fileName = f.name; fileChanged = true;
@@ -1060,6 +1118,9 @@ function openSettings(tab) {
         '<div class="sect"><h3>Recording folder</h3><p id="sFolder"></p>' +
           (CAN.folder ? '<div class="btn-row"><button type="button" class="btn primary" id="sPick"' + (busy ? ' disabled' : '') + '>' + ic('folder') + 'Choose folder…</button><button type="button" class="btn" id="sDl"' + (busy ? ' disabled' : '') + '>' + ic('download') + 'Use Downloads</button></div><p class="note">With a folder, the recording is written to disk while you record — no size limit, and a crash keeps everything up to that moment (file name ends in “(recording)”).</p>' : '<p class="note">This browser saves recordings to your Downloads folder. Chrome or Edge on a computer can save straight to a folder you choose.</p>') +
         '</div>' +
+        '<div class="grid2"><label class="field"><span>Replay Buffer length</span><span class="with-unit"><input type="number" id="sReplay" min="5" max="300" step="5"' + (RB.on ? ' disabled' : '') + '><span class="unit">s</span></span></label>' +
+        '<label class="field"><span>Stop recording automatically after</span><span class="with-unit"><input type="number" id="sTimer" min="0" max="1440" step="1"><span class="unit">min (0 = off)</span></span></label></div>' +
+        '<label class="field"><span>Audio monitoring device (where “Monitor” plays)</span><select id="sSink"><option value="">Default speakers / headphones</option></select></label>' +
         '<label class="field"><span>File name</span><input type="text" class="inp" id="sName" maxlength="120"></label><p class="note">Tokens: <code>{date}</code>, <code>{time}</code>, <code>{scene}</code>. Example: <b id="sNameEx"></b></p>' +
       '</div>' +
       '<div class="tab-pane" data-pane="video">' +
@@ -1070,7 +1131,7 @@ function openSettings(tab) {
         '<div class="btn-row"><button type="button" class="btn primary" id="sApplyVideo"' + (busy ? ' disabled' : '') + '>Apply video settings</button></div>' +
         '<p class="note">Sources are scaled to the new size. Larger sizes and 60 FPS need a faster computer — watch “Missed frames” in the status bar.</p>' +
       '</div>' +
-      '<div class="tab-pane" data-pane="hotkeys">' + hotkeysTable() + '</div>' +
+      '<div class="tab-pane" data-pane="hotkeys">' + hotkeyEditorHtml() + '</div>' +
       '<div class="tab-pane" data-pane="backup">' +
         '<div class="sect"><h3>Download backup</h3><p class="hint">Saves every scene, source, filter, mixer setting and preference — plus the images and media files of your sources — in one .json file.</p><div class="btn-row"><button type="button" class="btn primary" id="sBackup">' + ic('download') + 'Download backup</button></div></div>' +
         '<div class="sect"><h3>Restore from backup</h3><p class="hint">Replaces the current scenes and settings with those in a backup file. You are asked to confirm first.</p><div class="btn-row"><button type="button" class="btn" id="sRestore"' + (busy ? ' disabled' : '') + '>' + ic('upload') + 'Restore from backup…</button></div></div>' +
@@ -1107,6 +1168,11 @@ function openSettings(tab) {
     applyVideoSettings(w, h, fps); m.close();
     toast('Canvas is now ' + w + '×' + h + ' at ' + fps + ' FPS.', 'ok');
   });
+  q('sReplay').value = S.replaySec || 30; q('sReplay').addEventListener('change', e => { S.replaySec = clamp(Math.round(+e.target.value || 30), 5, 300); e.target.value = S.replaySec; saveSettings(); });
+  q('sTimer').value = S.autoStopMin || 0; q('sTimer').addEventListener('change', e => { S.autoStopMin = clamp(Math.round(+e.target.value || 0), 0, 1440); e.target.value = S.autoStopMin; saveSettings(); });
+  deviceOptions('audiooutput').then(list => { const sel = q('sSink'); list.filter(d => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications').forEach((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || 'Output ' + (i + 1); sel.appendChild(o); }); sel.value = S.monitorSink || ''; if (sel.value !== (S.monitorSink || '')) sel.value = ''; });
+  q('sSink').addEventListener('change', e => { S.monitorSink = e.target.value; saveSettings(); const c = ac(); if (c.setSinkId) c.setSinkId(S.monitorSink).then(() => toast('Monitoring now plays on the chosen device.', 'ok')).catch(er => toast('Could not switch the device: ' + er.message, 'err')); else toast('This browser cannot choose the monitoring device.'); });
+  bindHotkeyEditor($('.tab-pane[data-pane="hotkeys"]', m.el));
   q('sBackup').addEventListener('click', downloadBackup);
   q('sRestore').addEventListener('click', () => $('#fileRestore').click());
   q('sReset').addEventListener('click', async () => { if (await confirmDlg('Reset scene collection', 'Remove <b>all scenes and sources</b> and start again? Download a backup first if you may want them back.', 'Reset', true)) resetCollection(); });
@@ -1129,6 +1195,7 @@ function applyVideoSettings(w, h, fps) {
   sizeCanvases(); setFps(fps); saveColl(); renderAll(); layoutAll();
 }
 function hotkeysTable() {
+  if (typeof HOTKEY_ACTIONS !== 'undefined') return '<table class="tbl"><thead><tr><th>Keys</th><th>Action</th></tr></thead><tbody>' + HOTKEY_ACTIONS.filter(a => hotkeyOf(a[0])).map(a => '<tr><td><kbd>' + esc(hotkeyOf(a[0])) + '</kbd></td><td>' + esc(a[1]) + '</td></tr>').join('') + '<tr><td><kbd>Ctrl+Alt+1 … 9</kbd></td><td>Switch to scene 1 … 9</td></tr><tr><td><kbd>Arrow keys</kbd></td><td>Nudge the selected source (Shift: 10 px)</td></tr><tr><td><kbd>Ctrl+F / D / R</kbd></td><td>Fit / centre / reset the selected source</td></tr><tr><td><kbd>Delete · F2 · Enter</kbd></td><td>Remove · rename · properties</td></tr></tbody></table><p class="hint">Change them in Settings → Hotkeys.</p>';
   const rows = [['Ctrl + Alt + R', 'Start / stop recording'], ['Ctrl + Alt + P', 'Pause / resume recording'], ['Ctrl + Alt + S', 'Screenshot of the output'], ['Ctrl + Alt + T', 'Transition (Studio Mode)'], ['Ctrl + Alt + M', 'Mute / unmute the microphone'], ['Ctrl + Alt + 1 … 9', 'Switch to scene 1 … 9'], ['Arrow keys', 'Nudge the selected source 1 px (Shift: 10 px)'], ['Ctrl + F / Ctrl + D / Ctrl + R', 'Fit / centre / reset the selected source'], ['Delete', 'Remove the selected source or scene'], ['F2', 'Rename (in the Scenes or Sources list)'], ['Enter / double-click', 'Open properties'], ['Esc', 'Deselect, close a dialog or cancel the countdown']];
   return '<p class="hint">Shortcuts work while this window is active. For control while you work in other apps, use <b>Mini Controls</b>.</p><table class="tbl"><thead><tr><th>Keys</th><th>Action</th></tr></thead><tbody>' + rows.map(r => '<tr><td><kbd>' + esc(r[0]) + '</kbd></td><td>' + esc(r[1]) + '</td></tr>').join('') + '</tbody></table>';
 }
@@ -1191,7 +1258,7 @@ function openLibrary() {
     if (!LIB.list.length) { box.innerHTML = head + '<p>No recordings yet. Press <b>Start Recording</b> to make one.</p>'; return; }
     box.innerHTML = head + '<div class="rec-list">' + LIB.list.map(r => {
       const url = LIB.urls.get(r.id), inFolder = r.where === 'folder' && FOLDER.handle && FOLDER.name === r.folder;
-      return '<div class="rec-item"><div class="ri-main"><b>' + esc(r.name) + '</b><small>' + esc(fmtDate(r.at)) + ' · ' + fmtDur(r.ms) + ' · ' + fmtSize(r.size) + '</small><small>' + (r.black ? '⚠ Picture is black · ' : '') + esc(r.error ? 'Not saved: ' + r.error : r.where === 'folder' ? 'In the folder “' + r.folder + '”' : 'In Downloads') + '</small></div><div class="ri-btns">' +
+      return '<div class="rec-item"><div class="ri-main"><b>' + esc(r.name) + '</b><small>' + esc(fmtDate(r.at)) + ' · ' + fmtDur(r.ms) + ' · ' + fmtSize(r.size) + '</small><small>' + (r.replay ? 'Replay · ' : '') + (r.black ? '⚠ Picture is black · ' : '') + esc(r.error ? 'Not saved: ' + r.error : r.where === 'folder' ? 'In the folder “' + r.folder + '”' : 'In Downloads') + '</small></div><div class="ri-btns">' +
         (url || inFolder ? '<button type="button" class="btn sm" data-lib="play" data-id="' + r.id + '">' + ic('play') + 'Play</button>' : '') +
         (url ? '<button type="button" class="btn sm" data-lib="dl" data-id="' + r.id + '">' + ic('download') + 'Download again</button>' : '') +
         '<button type="button" class="ib" data-lib="del" data-id="' + r.id + '" aria-label="Remove from list" title="Remove from this list (the file is not deleted)">' + ic('close') + '</button></div></div>';
@@ -1281,7 +1348,14 @@ function paintTheme() {
 $('#themeBtn').addEventListener('click', () => setTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light'));
 matchMedia('(prefers-color-scheme: light)').addEventListener('change', e => { let saved = null; try { saved = localStorage.getItem('ibisr.theme'); } catch (er) {} if (!saved) { document.documentElement.setAttribute('data-theme', e.matches ? 'light' : 'dark'); paintTheme(); meterColors = null; } });
 $('#menuBtn').addEventListener('click', e => openMenu(e.currentTarget, [
+  { label: 'Undo', icon: 'arrow', hint: hotkeyOf('undo'), disabled: !UNDO.stack.length && !(UNDO.last && UNDO.last.key !== undoKey(coll)), run: () => doUndo(false) },
+  { label: 'Redo', icon: 'arrow', hint: hotkeyOf('redo'), disabled: !UNDO.redo.length, run: () => doUndo(true) },
+  { sep: true },
   { label: 'Settings', icon: 'settings', run: () => openSettings() },
+  { label: 'Help assistant', icon: 'help', hint: hotkeyOf('help'), run: () => HELP.open() },
+  { label: 'Scene Collections (' + currentCollName() + ')', icon: 'layout', run: openCollections },
+  { label: 'Multiview', icon: 'studio', hint: hotkeyOf('multiview'), run: openMultiview },
+  { label: 'Stats', icon: 'list', run: openStats },
   { label: 'Recordings', icon: 'list', run: openLibrary },
   { label: 'Help & keyboard shortcuts', icon: 'help', run: openHelp },
   { sep: true },
@@ -1366,6 +1440,8 @@ const ACT = {
   studio: () => setStudio(!coll.studio),
   mini: () => { if (MINI.win) { try { MINI.win.close(); } catch (e) {} } else openMini(); },
   library: openLibrary,
+  replay: () => toggleReplay(),
+  replaySave: () => doSaveReplay(),
   settings: () => openSettings(),
   cdCancel: () => { if (cdState) cdState.cancel(); },
 };
@@ -1378,13 +1454,7 @@ document.addEventListener('click', e => {
 /* ───────────── keyboard shortcuts ───────────── */
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && cdState) { e.preventDefault(); cdState.cancel(); return; }
-  if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey) {
-    const k = e.key.toLowerCase(), code = e.code;
-    const map = { KeyR: toggleRecording, KeyP: pauseRecording, KeyS: takeScreenshot, KeyT: doTransition, KeyM: () => { const s = firstMic(); if (s) { toggleMute(s.id); toast(s.name + (s.audio.muted ? ' muted' : ' unmuted')); } } };
-    if (map[code]) { e.preventDefault(); map[code](); return; }
-    if (/^Digit[1-9]$/.test(code)) { const sc = coll.scenes[+code.slice(5) - 1]; if (sc) { e.preventDefault(); selectScene(sc.id); } return; }
-    void k;
-  }
+  if (typeof handleHotkey === 'function' && handleHotkey(e)) return;   // editable hotkeys (studio.js)
   if ($('.modal-scrim') || typing(e.target)) return;
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
     const it = selItem(); if (!it || !isVisual(it)) return;
@@ -1411,7 +1481,7 @@ window.addEventListener('beforeunload', e => { if (REC.state === 'recording' || 
   // Studio mode is restored as saved
   const st = coll.studio; coll.studio = false; if (st) setStudio(true);
   await loadFolder();
-  Object.values(coll.sources).forEach(s => { if (s.type === 'text' || s.type === 'color') rtOf(s.id).status = 'live'; });
+  Object.values(coll.sources).forEach(s => { if (ALWAYS_LIVE.includes(s.type)) rtOf(s.id).status = 'live'; });
   renderAll(); layoutAll(); updateInstallUI(); statusTick();
   requestAnimationFrame(uiLoop);
   setInterval(statusTick, 500);
@@ -1420,7 +1490,7 @@ window.addEventListener('beforeunload', e => { if (REC.state === 'recording' || 
   const perm = async name => { try { return (await navigator.permissions.query({ name })).state; } catch (e) { return 'prompt'; } };
   const [cam, mic] = await Promise.all([perm('camera'), perm('microphone')]);
   for (const s of Object.values(coll.sources)) {
-    if (s.type === 'image' || s.type === 'media') startSource(s.id, { quiet: true });
+    if (FILE_TYPES.includes(s.type)) startSource(s.id, { quiet: true });
     else if (s.type === 'webcam' && cam === 'granted') startSource(s.id, { quiet: true });
     else if (s.type === 'mic' && mic === 'granted') startSource(s.id, { quiet: true });
   }

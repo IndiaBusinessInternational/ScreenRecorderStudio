@@ -2,7 +2,7 @@
 /* IBI Screen Recorder Studio — ENGINE: utilities, saved state, sources, audio mixer, compositor, recorder.
  * Everything runs in this browser tab; nothing is uploaded. ui.js draws the docks and dialogs on top of this. */
 const APP_NAME = 'IBI Screen Recorder Studio';
-const APP_VERSION = 'v1.2';
+const APP_VERSION = 'v2.0';
 
 /* ───────────── utilities ───────────── */
 const $ = (s, r) => (r || document).querySelector(s);
@@ -103,19 +103,32 @@ const SOURCE_TYPES = {
   image: { label: 'Image', icon: 'image', video: true, desc: 'A logo, photo or overlay (PNG, JPG, GIF, WebP, SVG)' },
   text: { label: 'Text', icon: 'text', video: true, desc: 'Titles and captions — can show the live time and date' },
   color: { label: 'Color Source', icon: 'color', video: true, desc: 'A solid colour block or background' },
+  slideshow: { label: 'Image Slide Show', icon: 'image', video: true, desc: 'Several images shown one after another, with a fade' },
+  scene: { label: 'Scene', icon: 'layout', video: true, desc: 'Another scene placed inside this one (nested scene)' },
+  captions: { label: 'Live Captions', icon: 'text', video: true, desc: 'Speech turned into on-screen subtitles as you talk' },
 };
+// Display Capture opens the share picker on one tab: Entire screen, Window or Chrome tab (OBS has separate
+// Display / Window capture sources; here they are one source with a preferred surface).
+const SURFACES = { monitor: 'Display Capture', window: 'Window Capture', browser: 'Chrome Tab Capture' };
+function typeLabel(s) { return s.type === 'display' && SURFACES[s.settings.surface] ? SURFACES[s.settings.surface] : SOURCE_TYPES[s.type].label; }
+function typeIcon(s) { return s.type === 'display' && s.settings.surface === 'window' ? 'layout' : s.type === 'display' && s.settings.surface === 'browser' ? 'list' : SOURCE_TYPES[s.type].icon; }
 const DEF_SETTINGS = {
   format: 'auto', vkbps: 0, akbps: 160, countdown: 3, fileName: 'IBI Recording {date} {time}',
   confirmStop: false, miniOnRecord: true, snap: true, mixerLayout: 'vertical', dockH: 300, autoStart: true,
+  hotkeys: {}, replaySec: 30, autoStopMin: 0, monitorSink: '', helpSeen: false,
 };
 let S = Object.assign({}, DEF_SETTINGS, LS.get('settings', {}));
 function saveSettings() { LS.set('settings', S); }
 
-function defFilters() { return { opacity: 100, brightness: 100, contrast: 100, saturate: 100, hue: 0, blur: 0, shape: 'rect', radius: 24, borderW: 0, borderColor: '#ffffff', chroma: { on: false, color: '#00ff00', similarity: 400, smoothness: 80, spill: 100 } }; }
-function defAudio() { return { volDb: 0, muted: false, monitor: false, gainDb: 0, mono: false, hidden: false }; }
+function defFilters() { return { opacity: 100, brightness: 100, contrast: 100, saturate: 100, hue: 0, blur: 0, sharpen: 0, scrollX: 0, scrollY: 0, blend: 'source-over', shape: 'rect', radius: 24, borderW: 0, borderColor: '#ffffff', chroma: { on: false, color: '#00ff00', similarity: 400, smoothness: 80, spill: 100 }, colorKey: { on: false, color: '#00ff00', similarity: 80, smoothness: 50 }, lumaKey: { on: false, min: 0, max: 100, smooth: 5 } }; }
+function defAudio() { return { volDb: 0, muted: false, monitor: false, gainDb: 0, mono: false, hidden: false, balance: 0, syncMs: 0, invert: false, gate: { on: false, open: -26, close: -32, attack: 25, hold: 200, release: 150 }, comp: { on: false, ratio: 10, threshold: -18, attack: 6, release: 60, gain: 0 }, limit: { on: false, threshold: -6, release: 60 }, eq: { on: false, low: 0, mid: 0, high: 0 } }; }
+const NESTED_F = ['chroma', 'colorKey', 'lumaKey'], NESTED_A = ['gate', 'comp', 'limit', 'eq'];
 function defSettingsFor(type) {
   switch (type) {
-    case 'display': return { audio: true, cursor: 'always' };
+    case 'display': return { audio: true, cursor: 'always', surface: '' };
+    case 'slideshow': return { files: [], interval: 5, fadeMs: 700, loop: true, random: false, w: coll ? coll.canvas.w : 1920, h: coll ? coll.canvas.h : 1080 };
+    case 'scene': return { sceneId: '' };
+    case 'captions': return { lang: 'en-IN', keepSec: 6, maxChars: 48, text: '', font: 'Segoe UI', size: 56, bold: true, italic: false, color: '#ffffff', bg: '#000000', bgOpacity: 60, outlineW: 0, outlineColor: '#000000', align: 'center' };
     case 'webcam': return { deviceId: '', res: '1080', fps: 30, facing: 'user' };
     case 'mic': return { deviceId: '', ns: true, ec: true, agc: false };
     case 'media': return { fileName: '', loop: true, restart: true };
@@ -133,7 +146,7 @@ function makeItem(sourceId, extra) {
 }
 let coll = null;
 function defaultCollection() {
-  coll = { v: 1, canvas: { w: 1920, h: 1080 }, fps: 30, scenes: [], sources: {}, program: '', preview: '', transition: { type: 'fade', ms: 300 }, studio: false };
+  coll = { v: 1, canvas: { w: 1920, h: 1080 }, fps: 30, scenes: [], sources: {}, program: '', preview: '', transition: { type: 'fade', ms: 300, color: '#000000', wipe: 'left', point: 500 }, studio: false };
   const items = [];
   if (CAN.display) {
     const d = makeSource('display', 'Display Capture'); coll.sources[d.id] = d; items.push(makeItem(d.id, { fit: 'fit' }));
@@ -152,21 +165,60 @@ function normalizeCollection(c) {
   for (const id in c.sources) {
     const s = c.sources[id]; if (!s || !SOURCE_TYPES[s.type]) continue;
     out.sources[id] = { id, type: s.type, name: String(s.name || SOURCE_TYPES[s.type].label).slice(0, 80), settings: Object.assign(defSettingsFor(s.type), s.settings || {}), filters: Object.assign(defFilters(), s.filters || {}), audio: Object.assign(defAudio(), s.audio || {}), nat: s.nat && s.nat.w > 0 ? { w: +s.nat.w, h: +s.nat.h } : null };
-    out.sources[id].filters.chroma = Object.assign(defFilters().chroma, (s.filters || {}).chroma || {});
+    NESTED_F.forEach(k => { out.sources[id].filters[k] = Object.assign(defFilters()[k], (s.filters || {})[k] || {}); });
+    NESTED_A.forEach(k => { out.sources[id].audio[k] = Object.assign(defAudio()[k], (s.audio || {})[k] || {}); });
   }
   c.scenes.forEach(sc => {
     if (!sc || !Array.isArray(sc.items)) return;
-    out.scenes.push({ id: String(sc.id || uid()), name: String(sc.name || 'Scene').slice(0, 80), items: sc.items.filter(it => it && out.sources[it.sourceId]).map(it => Object.assign(makeItem(it.sourceId), it, { crop: Object.assign({ l: 0, t: 0, r: 0, b: 0 }, it.crop || {}) })) });
+    out.scenes.push({ id: String(sc.id || uid()), name: String(sc.name || 'Scene').slice(0, 80), tr: sc.tr && TRANSITIONS[sc.tr.type] ? { type: sc.tr.type, ms: clamp(+sc.tr.ms || 300, 50, 20000) } : null, items: sc.items.filter(it => it && out.sources[it.sourceId]).map(it => Object.assign(makeItem(it.sourceId), it, { crop: Object.assign({ l: 0, t: 0, r: 0, b: 0 }, it.crop || {}) })) });
   });
   if (!out.scenes.length) return null;
   const ids = out.scenes.map(s => s.id);
   out.program = ids.includes(c.program) ? c.program : ids[0];
   out.preview = ids.includes(c.preview) ? c.preview : out.program;
-  if (c.transition && TRANSITIONS[c.transition.type]) out.transition = { type: c.transition.type, ms: clamp(+c.transition.ms || 300, 50, 20000) };
+  out.transition = Object.assign({ color: '#000000', wipe: 'left', point: 500 }, out.transition);
+  if (c.transition && TRANSITIONS[c.transition.type]) Object.assign(out.transition, { type: c.transition.type, ms: clamp(+c.transition.ms || 300, 50, 20000), color: /^#[0-9a-f]{6}$/i.test(c.transition.color) ? c.transition.color : '#000000', wipe: WIPES[c.transition.wipe] ? c.transition.wipe : 'left', point: clamp(+c.transition.point || 500, 0, 20000) });
   return out;
 }
 let saveT = 0;
-function saveColl() { clearTimeout(saveT); saveT = setTimeout(() => { if (!LS.set('collection', coll)) toast('Could not save the scene collection in this browser (storage full or blocked).', 'err'); }, 250); }
+// Undo / Redo (v2.0, OBS Edit menu): every saved change is a step; scene switching and measured sizes are not.
+const UNDO = { stack: [], redo: [], last: null };
+const undoKey = c => JSON.stringify(c, (k, v) => (k === 'nat' || k === 'program' || k === 'preview' || k === 'studio') ? undefined : v);
+function saveColl() {
+  clearTimeout(saveT);
+  saveT = setTimeout(() => {
+    const snap = { key: undoKey(coll), json: JSON.stringify(coll) };
+    if (UNDO.last && snap.key !== UNDO.last.key) { UNDO.stack.push(UNDO.last); if (UNDO.stack.length > 60) UNDO.stack.shift(); UNDO.redo = []; }
+    UNDO.last = snap;
+    if (!LS.set('collection', coll)) toast('Could not save the scene collection in this browser (storage full or blocked).', 'err');
+  }, 250);
+}
+let onCollectionReplaced = () => {};
+function setCollectionHook(fn) { onCollectionReplaced = fn; }
+const LIVE_START = ['display', 'webcam', 'mic', 'captions'];   // need a click or a permission: never auto-started by undo
+function replaceCollection(c) {
+  const prog = coll.program, prev = coll.preview, studio = coll.studio;
+  Object.keys(coll.sources).forEach(id => { if (!c.sources[id]) { stopSource(id); RT.delete(id); } });
+  if (c.scenes.some(x => x.id === prog)) c.program = prog;
+  if (c.scenes.some(x => x.id === prev)) c.preview = prev;
+  c.studio = studio;
+  coll = c;
+  Object.values(coll.sources).forEach(s => { const rt = rtOf(s.id); if (ALWAYS_LIVE.includes(s.type)) rt.status = 'live'; else if (rt.status === 'idle' && !LIVE_START.includes(s.type)) startSource(s.id, { quiet: true }); if (rt.au) applyAudio(s.id); rt.tKey = ''; rt.sKey = ''; });
+  sizeCanvases(); updateGates(0); LS.set('collection', coll);
+  onCollectionReplaced();
+}
+function undoStep(redo) {
+  clearTimeout(saveT);
+  const cur = { key: undoKey(coll), json: JSON.stringify(coll) };
+  if (UNDO.last && cur.key !== UNDO.last.key) { UNDO.stack.push(UNDO.last); UNDO.redo = []; UNDO.last = cur; }
+  const from = redo ? UNDO.redo : UNDO.stack, to = redo ? UNDO.stack : UNDO.redo;
+  const step = from.pop(); if (!step) return false;
+  to.push(UNDO.last || cur);
+  const c = normalizeCollection(JSON.parse(step.json)); if (!c) return false;
+  replaceCollection(c);
+  UNDO.last = { key: undoKey(coll), json: JSON.stringify(coll) };   // the normalised state, so the next save is not mistaken for a new edit (which would wipe Redo)
+  return true;
+}
 const sceneById = id => coll.scenes.find(s => s.id === id);
 const editSceneId = () => coll.studio ? coll.preview : coll.program;
 const editScene = () => sceneById(editSceneId());
@@ -208,6 +260,8 @@ async function startSource(id, opts) {
     else if (s.type === 'mic') await startMic(s, rt);
     else if (s.type === 'image') await startImage(s, rt);
     else if (s.type === 'media') await startMedia(s, rt);
+    else if (s.type === 'slideshow') await startSlideshow(s, rt);
+    else if (s.type === 'captions') await startCaptions(s, rt);
     rt.status = 'live';
   } catch (e) {
     teardown(rt);
@@ -222,10 +276,11 @@ function stopSource(id) {
   const rt = RT.get(id); if (!rt) return;
   teardown(rt);
   const s = coll.sources[id];
-  rt.status = s && (s.type === 'text' || s.type === 'color') ? 'live' : 'idle';
+  rt.status = s && ALWAYS_LIVE.includes(s.type) ? 'live' : 'idle';
   onSourcesChanged();
 }
 async function restartSource(id) { stopSource(id); return startSource(id); }
+const ALWAYS_LIVE = ['text', 'color', 'scene'];
 function teardown(rt) {
   rt.ending = true;
   if (rt.stream) rt.stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
@@ -233,6 +288,8 @@ function teardown(rt) {
   if (rt.frame) { try { rt.frame.close(); } catch (e) {} }
   if (rt.video) { try { rt.video.pause(); rt.video.srcObject = null; rt.video.removeAttribute('src'); rt.video.load(); } catch (e) {} rt.video.remove(); }
   if (rt.img && rt.img.remove) rt.img.remove();
+  if (rt.rec) { try { rt.rec.onend = null; rt.rec.abort(); } catch (e) {} rt.rec = null; }
+  if (rt.slides) { rt.slides.forEach(im => { try { URL.revokeObjectURL(im.src); } catch (e) {} }); rt.slides = null; }
   if (rt.url) URL.revokeObjectURL(rt.url);
   detachAudio(rt);
   rt.stream = rt.reader = rt.frame = rt.video = rt.img = rt.url = rt.track = null; rt.w = rt.h = 0; rt.needsPlay = false; rt.warn = ''; rt.blackSec = 0; rt.triedVideo = false; rt.path = '';
@@ -357,6 +414,7 @@ async function startDisplay(s, rt) {
   const st = s.settings;
   const video = { frameRate: { ideal: Math.max(coll.fps, 30), max: 60 }, width: { ideal: 3840 }, height: { ideal: 2160 } };
   if (st.cursor) video.cursor = st.cursor;
+  if (st.surface) video.displaySurface = st.surface;   // opens the picker on Entire screen / Window / Chrome tab
   const opts = { video, audio: st.audio ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: false } : false, selfBrowserSurface: 'exclude', surfaceSwitching: 'include', monitorTypeSurfaces: 'include' };
   if (st.audio) opts.systemAudio = 'include';
   const stream = await navigator.mediaDevices.getDisplayMedia(opts);
@@ -432,6 +490,61 @@ async function startMedia(s, rt) {
   rt.hasAudio = true;
   v.play().catch(() => { rt.needsPlay = true; });
 }
+async function startSlideshow(s, rt) {
+  const n = (s.settings.files || []).length; if (!n) throw new Error('nofile');
+  const slides = [];
+  for (let i = 0; i < n; i++) {
+    const b = await idb.get('blobs', s.id + '#' + i); if (!b) continue;
+    const im = new Image(); im.src = URL.createObjectURL(b);
+    try { await im.decode(); slides.push(im); } catch (e) { URL.revokeObjectURL(im.src); }
+  }
+  if (!slides.length) throw new Error('nofile');
+  rt.slides = slides; rt.t0 = performance.now(); rt.sKey = '';
+  rt.order = slides.map((_, i) => i);
+  if (s.settings.random) for (let i = rt.order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rt.order[i], rt.order[j]] = [rt.order[j], rt.order[i]]; }
+}
+function slideFrame(s, rt) {
+  if (!rt.slides || !rt.slides.length) return null;
+  const st = s.settings, W = +st.w || coll.canvas.w, H = +st.h || coll.canvas.h, iv = Math.max(1, +st.interval || 5) * 1000, fade = Math.min(+st.fadeMs || 0, iv / 2), n = rt.slides.length;
+  const el = performance.now() - rt.t0; let k = Math.floor(el / iv), within = el - k * iv;
+  if (!st.loop && k >= n) { k = n - 1; within = iv; }
+  const cur = rt.order[k % n], prev = k > 0 ? rt.order[(k - 1) % n] : -1;
+  const c = rt.ssc || (rt.ssc = document.createElement('canvas'));
+  if (c.width !== W || c.height !== H) { c.width = W; c.height = H; rt.sKey = ''; }
+  const fading = prev >= 0 && within < fade, key = cur + '|' + (fading ? Math.round(within / fade * 40) : 's');
+  if (rt.sKey !== key) {
+    rt.sKey = key; const x = c.getContext('2d'); x.clearRect(0, 0, W, H);
+    const fit = (im, a) => { const q = Math.min(W / im.naturalWidth, H / im.naturalHeight), w = im.naturalWidth * q, h = im.naturalHeight * q; x.globalAlpha = a; x.drawImage(im, (W - w) / 2, (H - h) / 2, w, h); };
+    if (fading) { fit(rt.slides[prev], 1); fit(rt.slides[cur], within / fade); } else fit(rt.slides[cur], 1);
+    x.globalAlpha = 1;
+  }
+  return { src: c, w: W, h: H };
+}
+// Live Captions: the browser's speech recognition (Chrome/Edge send the audio to Google for this - said in the UI).
+async function startCaptions(s, rt) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) throw new Error('Live captions need Chrome or Edge.');
+  const r = new SR();
+  r.lang = s.settings.lang || 'en-IN'; r.continuous = true; r.interimResults = true;
+  rt.capFinal = []; rt.capInterim = '';
+  r.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) rt.capFinal.push({ t: t.trim(), at: Date.now() }); else interim += t; }
+    rt.capInterim = interim;
+  };
+  r.onerror = e => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { rt.err = 'Microphone permission refused for captions.'; rt.status = 'error'; onSourcesChanged(); } };
+  r.onend = () => { if (rt.rec === r && !rt.ending) { try { r.start(); } catch (e) {} } };   // Chrome stops after a pause - keep listening
+  rt.rec = r; r.start();
+}
+function captionString(s, rt) {
+  const keep = (+s.settings.keepSec || 6) * 1000, now = Date.now();
+  rt.capFinal = (rt.capFinal || []).filter(x => now - x.at < keep);
+  const words = [...rt.capFinal.map(x => x.t), rt.capInterim || ''].join(' ').replace(/\s+/g, ' ').trim().split(' ');
+  const max = Math.max(16, +s.settings.maxChars || 48), lines = []; let line = '';
+  words.forEach(w => { if (!w) return; if ((line + ' ' + w).trim().length > max) { lines.push(line.trim()); line = w; } else line += ' ' + w; });
+  if (line.trim()) lines.push(line.trim());
+  return lines.slice(-2).join('\n');
+}
 function mediaControl(id, what) {
   const rt = RT.get(id); if (!rt || !rt.video || coll.sources[id].type !== 'media') return;
   const v = rt.video;
@@ -459,7 +572,7 @@ function textString(s) {
 }
 function textCanvas(s, rt) {
   rt = rt || rtOf(s.id);
-  const st = s.settings, str = textString(s);
+  const st = s.settings, str = s.type === 'captions' ? captionString(s, rt) : textString(s);
   const key = str + '|' + st.font + st.size + st.bold + st.italic + st.color + st.bg + st.bgOpacity + st.outlineW + st.outlineColor + st.align;
   if (rt.tc && rt.tKey === key) return rt.tc;
   const c = rt.tc || (rt.tc = document.createElement('canvas'));
@@ -487,6 +600,9 @@ function textCanvas(s, rt) {
 function natSize(s) {
   if (s.type === 'color') return { w: +s.settings.w || 1, h: +s.settings.h || 1 };
   if (s.type === 'text') { const c = textCanvas(s); return { w: c.width, h: c.height }; }
+  if (s.type === 'captions') { const c = textCanvas(s); return { w: Math.max(c.width, 400), h: Math.max(c.height, 80) }; }
+  if (s.type === 'slideshow') return { w: +s.settings.w || coll.canvas.w, h: +s.settings.h || coll.canvas.h };
+  if (s.type === 'scene') return { w: coll.canvas.w, h: coll.canvas.h };
   const rt = RT.get(s.id);
   if (rt && rt.w) return { w: rt.w, h: rt.h };
   if (s.nat) return s.nat;
@@ -527,7 +643,17 @@ function applyPendingFit(sc, it) {
 }
 
 /* ───────────── audio engine ───────────── */
-const AU = { ctx: null, mix: null, dest: null };
+const AU = { ctx: null, mix: null, dest: null, gateReady: false };
+// Noise gate as an AudioWorklet (OBS defaults: open -26 dB, close -32 dB, attack 25 ms, hold 200 ms, release 150 ms).
+const GATE_SRC = `class G extends AudioWorkletProcessor{static get parameterDescriptors(){return[{name:'open',defaultValue:-26},{name:'close',defaultValue:-32},{name:'attack',defaultValue:25},{name:'hold',defaultValue:200},{name:'release',defaultValue:150}]}
+constructor(){super();this.g=0;this.held=0;this.env=0;this.tg=0}
+process(inp,out,p){const i=inp[0],o=out[0];if(!i||!i.length){for(const ch of o)ch.fill(0);return true}
+const n=i[0].length,sr=sampleRate,op=Math.pow(10,p.open[0]/20),cl=Math.pow(10,p.close[0]/20),at=1/Math.max(1,p.attack[0]*sr/1000),rl=1/Math.max(1,p.release[0]*sr/1000),hd=p.hold[0]*sr/1000;
+for(let k=0;k<n;k++){let pk=0;for(let c=0;c<i.length;c++){const v=Math.abs(i[c][k]);if(v>pk)pk=v}
+this.env=Math.max(pk,this.env*0.9995);if(this.env>=op){this.held=hd;this.tg=1}else if(this.env<cl){if(this.held>0)this.held--;else this.tg=0}
+this.g+=this.tg>this.g?Math.min(at,this.tg-this.g):-Math.min(rl,this.g-this.tg);
+for(let c=0;c<o.length;c++)o[c][k]=(i[c]||i[0])[k]*this.g}return true}}
+registerProcessor('ibisr-gate',G);`;
 function ac() {
   if (AU.ctx) return AU.ctx;
   const C = window.AudioContext || window.webkitAudioContext;
@@ -536,25 +662,48 @@ function ac() {
   AU.dest = AU.ctx.createMediaStreamDestination();
   AU.dest.channelCount = 2;
   AU.mix.connect(AU.dest);
+  if (AU.ctx.audioWorklet) AU.ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([GATE_SRC], { type: 'text/javascript' }))).then(() => { AU.gateReady = true; RT.forEach((rt, id) => { if (rt.au) rewireAudio(id); }); }).catch(() => {});
+  if (S.monitorSink && AU.ctx.setSinkId) AU.ctx.setSinkId(S.monitorSink).catch(() => {});
   return AU.ctx;
 }
 function resumeAudio() { if (AU.ctx && AU.ctx.state === 'suspended') AU.ctx.resume().catch(() => {}); }
 function attachAudio(s, rt, node) {
   const c = ac();
-  const a = { node, fader: c.createGain(), up: c.createGain(), gate: c.createGain(), mon: c.createGain(), split: c.createChannelSplitter(2), aL: c.createAnalyser(), aR: c.createAnalyser() };
+  const a = { node, fader: c.createGain(), pan: c.createStereoPanner(), up: c.createGain(), gate: c.createGain(), mon: c.createGain(), split: c.createChannelSplitter(2), aL: c.createAnalyser(), aR: c.createAnalyser(),
+    delay: c.createDelay(2), pol: c.createGain(), eqL: c.createBiquadFilter(), eqM: c.createBiquadFilter(), eqH: c.createBiquadFilter(), comp: c.createDynamicsCompressor(), compGain: c.createGain(), lim: c.createDynamicsCompressor(), wired: null };
   a.up.channelCount = 2; a.up.channelCountMode = 'explicit'; a.up.channelInterpretation = 'speakers';   // mono mics show on both meters
   a.aL.fftSize = a.aR.fftSize = 1024; a.buf = new Float32Array(1024);
-  node.connect(a.fader);
-  a.fader.connect(a.gate); a.gate.connect(AU.mix);
-  a.fader.connect(a.up); a.up.connect(a.split); a.split.connect(a.aL, 0); a.split.connect(a.aR, 1);
-  a.fader.connect(a.mon); a.mon.connect(c.destination);
+  a.pol.gain.value = -1;
+  a.eqL.type = 'lowshelf'; a.eqL.frequency.value = 250; a.eqM.type = 'peaking'; a.eqM.frequency.value = 1500; a.eqM.Q.value = 0.7; a.eqH.type = 'highshelf'; a.eqH.frequency.value = 4000;
+  a.lim.ratio.value = 20; a.lim.knee.value = 0; a.lim.attack.value = 0.001;
+  a.fader.connect(a.pan);
+  a.pan.connect(a.gate); a.gate.connect(AU.mix);
+  a.pan.connect(a.up); a.up.connect(a.split); a.split.connect(a.aL, 0); a.split.connect(a.aR, 1);
+  a.pan.connect(a.mon); a.mon.connect(c.destination);
   a.gate.gain.value = gateTarget(s.id);
   rt.au = a; rt.lvl = [-100, -100]; rt.hold = [-100, -100]; rt.holdT = [0, 0];
   applyAudio(s.id);
 }
+// Audio filters (OBS order: sync offset > invert polarity > 3-band EQ > noise gate > compressor > limiter > fader > balance).
+function rewireAudio(id) {
+  const s = coll.sources[id], rt = RT.get(id); if (!s || !rt || !rt.au) return;
+  const a = rt.au, fx = s.audio;
+  const want = [fx.syncMs > 0 ? 'd' : '', fx.invert ? 'p' : '', fx.eq.on ? 'e' : '', fx.gate.on && AU.gateReady ? 'g' : '', fx.comp.on ? 'c' : '', fx.limit.on ? 'l' : ''].join('');
+  if (want === a.wired) return;
+  ['node', 'delay', 'pol', 'eqL', 'eqM', 'eqH', 'gateN', 'comp', 'compGain', 'lim'].forEach(k => { if (a[k]) try { a[k].disconnect(); } catch (e) {} });
+  let cur = a.node; const link = n => { cur.connect(n); cur = n; };
+  if (want.includes('d')) link(a.delay);
+  if (want.includes('p')) link(a.pol);
+  if (want.includes('e')) { link(a.eqL); link(a.eqM); link(a.eqH); }
+  if (want.includes('g')) { if (!a.gateN) a.gateN = new AudioWorkletNode(AU.ctx, 'ibisr-gate', { outputChannelCount: [2] }); link(a.gateN); }
+  if (want.includes('c')) { link(a.comp); link(a.compGain); }
+  if (want.includes('l')) link(a.lim);
+  cur.connect(a.fader);
+  a.wired = want;
+}
 function detachAudio(rt) {
   const a = rt.au; if (!a) return;
-  ['node', 'fader', 'up', 'gate', 'mon', 'split'].forEach(k => { try { a[k].disconnect(); } catch (e) {} });
+  ['node', 'fader', 'pan', 'up', 'gate', 'mon', 'split', 'delay', 'pol', 'eqL', 'eqM', 'eqH', 'gateN', 'comp', 'compGain', 'lim'].forEach(k => { if (a[k]) try { a[k].disconnect(); } catch (e) {} });
   rt.au = null; rt.hasAudio = false;
 }
 function applyAudio(id) {
@@ -565,8 +714,20 @@ function applyAudio(id) {
   a.fader.channelCountMode = au.mono ? 'explicit' : 'max';
   a.fader.channelCount = au.mono ? 1 : 2;
   a.fader.channelInterpretation = 'speakers';
+  const fx = au, sm = (p, v) => p.setTargetAtTime(v, t, 0.02);
+  a.delay.delayTime.value = clamp(+fx.syncMs || 0, 0, 2000) / 1000;
+  sm(a.eqL.gain, +fx.eq.low || 0); sm(a.eqM.gain, +fx.eq.mid || 0); sm(a.eqH.gain, +fx.eq.high || 0);
+  a.comp.threshold.value = clamp(+fx.comp.threshold, -60, 0); a.comp.ratio.value = clamp(+fx.comp.ratio, 1, 20); a.comp.attack.value = clamp(+fx.comp.attack, 0, 1000) / 1000; a.comp.release.value = clamp(+fx.comp.release, 1, 1000) / 1000; a.comp.knee.value = 6;
+  sm(a.compGain.gain, dbToLin(+fx.comp.gain || 0));
+  a.lim.threshold.value = clamp(+fx.limit.threshold, -60, 0); a.lim.release.value = clamp(+fx.limit.release, 1, 1000) / 1000;
+  sm(a.pan.pan, clamp(+fx.balance || 0, -1, 1));
+  rewireAudio(id);
+  if (a.gateN) { const P = a.gateN.parameters; P.get('open').value = +fx.gate.open; P.get('close').value = +fx.gate.close; P.get('attack').value = +fx.gate.attack; P.get('hold').value = +fx.gate.hold; P.get('release').value = +fx.gate.release; }
 }
-function inScene(sceneId, sourceId) { const sc = sceneById(sceneId); return !!(sc && sc.items.some(it => it.sourceId === sourceId && it.visible)); }
+function inScene(sceneId, sourceId, depth) {
+  const sc = sceneById(sceneId); depth = depth || 0; if (!sc || depth > 8) return false;
+  return sc.items.some(it => it.visible && (it.sourceId === sourceId || (coll.sources[it.sourceId] && coll.sources[it.sourceId].type === 'scene' && inScene(coll.sources[it.sourceId].settings.sceneId, sourceId, depth + 1))));
+}
 function gateTarget(sourceId) { return inScene(coll.program, sourceId) ? 1 : 0; }
 function updateGates(ms) {
   if (!AU.ctx) return;
@@ -591,7 +752,20 @@ function meterRead(rt) {
 }
 
 /* ───────────── compositor ───────────── */
-const TRANSITIONS = { cut: 'Cut', fade: 'Fade', fadeblack: 'Fade to Black', slide: 'Slide', swipe: 'Swipe' };
+const TRANSITIONS = { cut: 'Cut', fade: 'Fade', fadeblack: 'Fade to Black', fadecolor: 'Fade to Color', slide: 'Slide', swipe: 'Swipe', wipe: 'Luma Wipe', stinger: 'Stinger' };
+const WIPES = { left: 'Left to right', right: 'Right to left', down: 'Top to bottom', up: 'Bottom to top', radial: 'Circle out', clock: 'Clock', diamond: 'Diamond', barn: 'Barn doors' };
+// Stinger: a video (often with transparency, WebM VP9) played over the switch; the scene changes at the transition point.
+const STING = { video: null, url: '', ready: false, name: '' };
+async function loadStinger() {
+  if (STING.video) { STING.video.pause(); STING.video.remove(); URL.revokeObjectURL(STING.url); }
+  STING.video = null; STING.ready = false; STING.name = '';
+  const b = await idb.get('blobs', 'stinger'); if (!b) return false;
+  const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto';
+  STING.url = URL.createObjectURL(b); v.src = STING.url; document.getElementById('hiddenMedia').appendChild(v);
+  await new Promise(r => { v.onloadeddata = r; v.onerror = r; });
+  STING.video = v; STING.ready = v.readyState >= 2 && isFinite(v.duration); STING.name = b.name || 'stinger';
+  return STING.ready;
+}
 const progCanvas = document.getElementById('progCanvas');
 const pctx = progCanvas.getContext('2d', { alpha: false });
 const prevCanvas = document.getElementById('prevCanvas');
@@ -612,6 +786,7 @@ function sizeCanvases() {
 }
 function filterString(f) {
   const p = [];
+  if (+f.sharpen > 0) p.push(sharpenFilter(f.sharpen));
   if (+f.brightness !== 100) p.push('brightness(' + f.brightness + '%)');
   if (+f.contrast !== 100) p.push('contrast(' + f.contrast + '%)');
   if (+f.saturate !== 100) p.push('saturate(' + f.saturate + '%)');
@@ -634,11 +809,34 @@ function drawableOf(s, rt) {
     case 'image': return rt.img ? { src: rt.img, w: rt.w, h: rt.h } : null;
     case 'text': { const c = textCanvas(s, rt); return { src: c, w: c.width, h: c.height }; }
     case 'color': return { color: s.settings.color, w: +s.settings.w || 1, h: +s.settings.h || 1 };
+    case 'captions': { const c = textCanvas(s, rt); return { src: c, w: c.width, h: c.height }; }
+    case 'slideshow': return slideFrame(s, rt);
+    case 'scene': {
+      const sc = sceneById(s.settings.sceneId); if (!sc || SCENE_STACK.has(sc.id)) return null;
+      const W = coll.canvas.w, H = coll.canvas.h, c = rt.nc || (rt.nc = document.createElement('canvas'));
+      if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+      const x = c.getContext('2d'); x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, W, H);
+      renderScene(x, sc, 1, 0);
+      return { src: c, w: W, h: H };
+    }
   }
   return null;
 }
+const SCENE_STACK = new Set();   // stops a scene from containing itself
+// Sharpen (OBS "Sharpen" filter): an SVG convolution referenced from the canvas filter.
+function sharpenFilter(amount) {
+  const n = Math.round(clamp(+amount, 1, 100)), id = 'ibisrSh' + n;
+  if (!document.getElementById(id)) {
+    const k = (n / 100 * 1.2).toFixed(3), c = (1 + 4 * k).toFixed(3);
+    let svg = document.getElementById('ibisrFx');
+    if (!svg) { svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.id = 'ibisrFx'; svg.setAttribute('width', '0'); svg.setAttribute('height', '0'); svg.style.position = 'absolute'; document.body.appendChild(svg); }
+    svg.insertAdjacentHTML('beforeend', '<filter id="' + id + '" color-interpolation-filters="sRGB"><feConvolveMatrix order="3" preserveAlpha="true" kernelMatrix="0 -' + k + ' 0 -' + k + ' ' + c + ' -' + k + ' 0 -' + k + ' 0"/></filter>');
+  }
+  return 'url(#' + id + ')';
+}
 // Chroma key (green screen) — the OBS formula: distance in CbCr from the key colour, minus similarity, over smoothness, plus spill reduction.
-function chromaKey(rt, src, sx, sy, sw, sh, dw, dh, ck) {
+function keysOn(f) { return (f.chroma && f.chroma.on) || (f.colorKey && f.colorKey.on) || (f.lumaKey && f.lumaKey.on); }
+function chromaKey(rt, src, sx, sy, sw, sh, dw, dh, ck, f) {
   const W = Math.max(1, Math.min(1280, Math.round(Math.abs(dw)))), H = Math.max(1, Math.round(Math.abs(dh) * W / Math.abs(dw)));
   const c = rt.ck || (rt.ck = document.createElement('canvas'));
   if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
@@ -648,14 +846,22 @@ function chromaKey(rt, src, sx, sy, sw, sh, dw, dh, ck) {
   const hex = String(ck.color || '#00ff00').replace('#', ''), kr = parseInt(hex.slice(0, 2), 16) / 255, kg = parseInt(hex.slice(2, 4), 16) / 255, kb = parseInt(hex.slice(4, 6), 16) / 255;
   const kcb = -0.1146 * kr - 0.3854 * kg + 0.5 * kb, kcr = 0.5 * kr - 0.4542 * kg - 0.0458 * kb;
   const sim = (+ck.similarity || 400) / 1000, smooth = Math.max(0.001, (+ck.smoothness || 80) / 1000), spill = Math.max(0.001, (+ck.spill || 100) / 1000);
+  const CK = !!ck.on, K2 = f.colorKey || {}, CO = !!K2.on, LK = f.lumaKey || {}, LU = !!LK.on;
+  const hx = String(K2.color || '#00ff00').replace('#', ''), qr = parseInt(hx.slice(0, 2), 16) / 255, qg = parseInt(hx.slice(2, 4), 16) / 255, qb = parseInt(hx.slice(4, 6), 16) / 255;
+  const csim = (+K2.similarity || 80) / 1000, csm = Math.max(0.001, (+K2.smoothness || 50) / 1000);
+  const lmin = (+LK.min || 0) / 100, lmax = (LK.max == null ? 100 : +LK.max) / 100, lsm = Math.max(0.001, (+LK.smooth || 0) / 100);
   for (let i = 0; i < d.length; i += 4) {
     const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
-    const cb = -0.1146 * r - 0.3854 * g + 0.5 * b, cr = 0.5 * r - 0.4542 * g - 0.0458 * b;
-    const dist = Math.sqrt((cb - kcb) * (cb - kcb) + (cr - kcr) * (cr - kcr));
-    const base = dist - sim;
-    const a = Math.pow(clamp(base / smooth, 0, 1), 1.5);
-    const sp = Math.pow(clamp(base / spill, 0, 1), 1.5);
-    if (sp < 1) { const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b; d[i] = (lum + (r - lum) * sp) * 255; d[i + 1] = (lum + (g - lum) * sp) * 255; d[i + 2] = (lum + (b - lum) * sp) * 255; }
+    let a = 1;
+    if (CK) {
+      const cb = -0.1146 * r - 0.3854 * g + 0.5 * b, cr = 0.5 * r - 0.4542 * g - 0.0458 * b;
+      const base = Math.sqrt((cb - kcb) * (cb - kcb) + (cr - kcr) * (cr - kcr)) - sim;
+      a = Math.pow(clamp(base / smooth, 0, 1), 1.5);
+      const sp = Math.pow(clamp(base / spill, 0, 1), 1.5);
+      if (sp < 1) { const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b; d[i] = (lum + (r - lum) * sp) * 255; d[i + 1] = (lum + (g - lum) * sp) * 255; d[i + 2] = (lum + (b - lum) * sp) * 255; }
+    }
+    if (CO) { const dist = Math.sqrt(((r - qr) ** 2 + (g - qg) ** 2 + (b - qb) ** 2) / 3); a *= Math.pow(clamp((dist - csim) / csm, 0, 1), 1.5); }
+    if (LU) { const l = 0.2126 * r + 0.7152 * g + 0.0722 * b; a *= clamp((l - lmin) / lsm + 0.5, 0, 1) * clamp((lmax - l) / lsm + 0.5, 0, 1); }
     d[i + 3] = d[i + 3] * a;
   }
   x.putImageData(img, 0, 0);
@@ -668,18 +874,28 @@ function drawItem(ctx, it, s) {
   const f = s.filters, cr = it.crop;
   ctx.save();
   ctx.globalAlpha = clamp((+f.opacity) / 100, 0, 1);
+  if (f.blend && f.blend !== 'source-over') ctx.globalCompositeOperation = f.blend;   // OBS blending modes
   const fs = filterString(f); if (fs) ctx.filter = fs;
   ctx.translate(b.x + b.w / 2, b.y + b.h / 2);
   if (it.rot) ctx.rotate(it.rot * Math.PI / 180);
   ctx.scale(it.flipH ? -1 : 1, it.flipV ? -1 : 1);
   const dw = it.rot % 180 ? b.h : b.w, dh = it.rot % 180 ? b.w : b.h;
-  if (f.shape && f.shape !== 'rect') { ctx.beginPath(); shapePath(ctx, f, dw, dh); ctx.clip(); }
+  const scroll = +f.scrollX || +f.scrollY;
+  if ((f.shape && f.shape !== 'rect') || scroll) { ctx.beginPath(); shapePath(ctx, f, dw, dh); ctx.clip(); }
   if (d.color) { ctx.fillStyle = d.color; ctx.fillRect(-dw / 2, -dh / 2, dw, dh); }
   else {
     const sw = d.w - cr.l - cr.r, sh = d.h - cr.t - cr.b;
     if (sw > 0 && sh > 0) {
       try {
-        if (f.chroma && f.chroma.on) ctx.drawImage(chromaKey(rt, d.src, cr.l, cr.t, sw, sh, dw, dh, f.chroma), -dw / 2, -dh / 2, dw, dh);
+        if (scroll) {   // OBS "Scroll" filter: the picture moves and wraps around (speed in source pixels per second)
+          const t = performance.now() / 1000, ox = (((t * (+f.scrollX || 0) * dw / Math.max(1, sw)) % dw) + dw) % dw, oy = (((t * (+f.scrollY || 0) * dh / Math.max(1, sh)) % dh) + dh) % dh;
+          const img = keysOn(f) ? chromaKey(rt, d.src, cr.l, cr.t, sw, sh, dw, dh, f.chroma, f) : null;
+          for (let ix = -1; ix <= 0; ix++) for (let iy = -1; iy <= 0; iy++) {
+            const X = -dw / 2 + ox + ix * dw, Y = -dh / 2 + oy + iy * dh;
+            if (img) ctx.drawImage(img, X, Y, dw, dh); else ctx.drawImage(d.src, cr.l, cr.t, sw, sh, X, Y, dw, dh);
+          }
+        }
+        else if (keysOn(f)) ctx.drawImage(chromaKey(rt, d.src, cr.l, cr.t, sw, sh, dw, dh, f.chroma, f), -dw / 2, -dh / 2, dw, dh);
         else ctx.drawImage(d.src, cr.l, cr.t, sw, sh, -dw / 2, -dh / 2, dw, dh);
       } catch (e) {}
     }
@@ -691,7 +907,8 @@ function drawItem(ctx, it, s) {
   ctx.restore();
 }
 function renderScene(ctx, sc, scale, ox) {
-  if (!sc) return;
+  if (!sc || SCENE_STACK.has(sc.id)) return;
+  SCENE_STACK.add(sc.id);
   ctx.save();
   ctx.setTransform(scale, 0, 0, scale, (ox || 0) * scale, 0);
   for (let i = sc.items.length - 1; i >= 0; i--) {
@@ -700,8 +917,19 @@ function renderScene(ctx, sc, scale, ox) {
     drawItem(ctx, it, s);
   }
   ctx.restore();
+  SCENE_STACK.delete(sc.id);
 }
 const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+function wipePath(x, kind, e, W, H) {
+  if (kind === 'right') x.rect(W * (1 - e), 0, W * e, H);
+  else if (kind === 'down') x.rect(0, 0, W, H * e);
+  else if (kind === 'up') x.rect(0, H * (1 - e), W, H * e);
+  else if (kind === 'radial') x.arc(W / 2, H / 2, Math.hypot(W, H) / 2 * e, 0, Math.PI * 2);
+  else if (kind === 'clock') { x.moveTo(W / 2, H / 2); x.arc(W / 2, H / 2, Math.hypot(W, H), -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * e); x.closePath(); }
+  else if (kind === 'diamond') { const r = (W + H) / 2 * e; x.moveTo(W / 2, H / 2 - r); x.lineTo(W / 2 + r, H / 2); x.lineTo(W / 2, H / 2 + r); x.lineTo(W / 2 - r, H / 2); x.closePath(); }
+  else if (kind === 'barn') x.rect(W / 2 * (1 - e), 0, W * e, H);
+  else x.rect(0, 0, W * e, H);
+}
 function renderProgram(now) {
   const W = coll.canvas.w, H = coll.canvas.h;
   pctx.setTransform(1, 0, 0, 1, 0, 0); pctx.globalAlpha = 1; pctx.filter = 'none';
@@ -715,10 +943,17 @@ function renderProgram(now) {
         renderScene(pctx, from, 1, 0);
         tctx.setTransform(1, 0, 0, 1, 0, 0); tctx.fillStyle = '#000'; tctx.fillRect(0, 0, W, H); renderScene(tctx, to, 1, 0);
         pctx.globalAlpha = e; pctx.drawImage(tmpCanvas, 0, 0); pctx.globalAlpha = 1;
-      } else if (TR.type === 'fadeblack') {
-        if (e < 0.5) { renderScene(pctx, from, 1, 0); pctx.fillStyle = 'rgba(0,0,0,' + (e * 2) + ')'; }
-        else { renderScene(pctx, to, 1, 0); pctx.fillStyle = 'rgba(0,0,0,' + ((1 - e) * 2) + ')'; }
-        pctx.fillRect(0, 0, W, H);
+      } else if (TR.type === 'fadeblack' || TR.type === 'fadecolor') {
+        renderScene(pctx, e < 0.5 ? from : to, 1, 0);
+        pctx.globalAlpha = e < 0.5 ? e * 2 : (1 - e) * 2; pctx.fillStyle = TR.type === 'fadecolor' ? TR.color : '#000'; pctx.fillRect(0, 0, W, H); pctx.globalAlpha = 1;
+      } else if (TR.type === 'wipe') {
+        renderScene(pctx, from, 1, 0);
+        pctx.save(); pctx.beginPath(); wipePath(pctx, TR.wipe, e, W, H); pctx.clip();
+        pctx.fillStyle = '#000'; pctx.fillRect(0, 0, W, H); renderScene(pctx, to, 1, 0); pctx.restore();
+      } else if (TR.type === 'stinger') {
+        renderScene(pctx, (now - TR.t0) < TR.point ? from : to, 1, 0);
+        const v = STING.video;
+        if (v && v.readyState >= 2) { const q = Math.max(W / v.videoWidth, H / v.videoHeight), w = v.videoWidth * q, h = v.videoHeight * q; try { pctx.drawImage(v, (W - w) / 2, (H - h) / 2, w, h); } catch (er) {} }
       } else if (TR.type === 'slide') {
         renderScene(pctx, from, 1, -e * W); renderScene(pctx, to, 1, (1 - e) * W);
       } else {   // swipe: the new scene slides in over the old one
@@ -741,10 +976,12 @@ function setTransitionEndHook(fn) { onTransitionEnd = fn; }
 function goProgram(toId, opts) {
   opts = opts || {};
   if (!sceneById(toId) || (toId === coll.program && !TR.active)) return;
-  const type = opts.cut ? 'cut' : coll.transition.type, ms = coll.transition.ms;
+  const target = sceneById(toId), tr = target.tr && TRANSITIONS[target.tr.type] ? Object.assign({}, coll.transition, target.tr) : coll.transition;   // per-scene override (OBS "Transition Override")
+  let type = opts.cut ? 'cut' : tr.type, ms = tr.ms;
+  if (type === 'stinger') { if (STING.ready) { ms = STING.video.duration * 1000; STING.video.currentTime = 0; STING.video.play().catch(() => {}); } else type = 'fade'; }
   const from = coll.program;
   coll.program = toId;
-  if (type !== 'cut' && from !== toId) { TR.active = true; TR.from = from; TR.to = toId; TR.t0 = performance.now(); TR.ms = ms; TR.type = type; }
+  if (type !== 'cut' && from !== toId) { TR.active = true; TR.from = from; TR.to = toId; TR.t0 = performance.now(); TR.ms = ms; TR.type = type; TR.color = tr.color || '#000000'; TR.wipe = tr.wipe || 'left'; TR.point = Math.min(+tr.point || ms / 2, ms); }
   else TR.active = false;
   updateGates(type === 'cut' ? 0 : ms);
   // Media sources set to "restart when the scene becomes active"
@@ -772,6 +1009,7 @@ ticker.onmessage = () => {
   STATS.frames++;
   if (now - STATS.secT >= 1000) { STATS.fps = STATS.frames * 1000 / (now - STATS.secT || 1000); STATS.frames = 0; STATS.secT = now; }
   if (REC.state === 'recording' && REC.vtrack && REC.vtrack.requestFrame) REC.vtrack.requestFrame();
+  if (RB.on && RB.vtrack && RB.vtrack.requestFrame) RB.vtrack.requestFrame();
 };
 function setFps(fps) { coll.fps = fps; lastTick = 0; ticker.postMessage(1000 / fps); }
 
@@ -990,6 +1228,63 @@ function removeFromLibrary(id) {
   const u = LIB.urls.get(id); if (u) { URL.revokeObjectURL(u); LIB.urls.delete(id); }
 }
 
+/* Replay Buffer (OBS): keeps the last N seconds in memory; "Save Replay" writes them to a file.
+   Two recorders run staggered by N seconds and each restarts every 2N, so one always holds at least N seconds. */
+const RB = { on: false, recs: [], vtrack: null, timer: 0, fmt: null };
+let onReplayChanged = () => {};
+function setReplayHook(fn) { onReplayChanged = fn; }
+function rbMake() {
+  const stream = new MediaStream([RB.vtrack, AU.dest.stream.getAudioTracks()[0]]);
+  const vk = +S.vkbps || recommendedKbps(coll.canvas.w, coll.canvas.h, coll.fps);
+  const r = { mr: new MediaRecorder(stream, { mimeType: RB.fmt.mime, videoBitsPerSecond: vk * 1000, audioBitsPerSecond: (+S.akbps || 160) * 1000 }), chunks: [], t0: performance.now() };
+  r.mr.ondataavailable = e => { if (e.data && e.data.size) r.chunks.push(e.data); };
+  r.mr.start(1000);
+  return r;
+}
+function startReplayBuffer() {
+  if (RB.on) return true;
+  RB.fmt = pickFormat(); if (!RB.fmt) { toast('This browser cannot record video.', 'err'); return false; }
+  ac(); resumeAudio();
+  RB.vtrack = progCanvas.captureStream(0).getVideoTracks()[0];
+  RB.on = true; RB.recs = [rbMake()];
+  const N = clamp(+S.replaySec || 30, 5, 300) * 1000;
+  RB.second = setTimeout(() => { if (RB.on) RB.recs.push(rbMake()); }, N);
+  RB.timer = setInterval(() => {   // restart whichever recorder is older than 2N
+    if (!RB.on) return;
+    RB.recs.forEach((r, i) => { if (performance.now() - r.t0 >= 2 * N) { try { r.mr.stop(); } catch (e) {} RB.recs[i] = rbMake(); } });
+  }, 1000);
+  onReplayChanged();
+  return true;
+}
+function stopReplayBuffer() {
+  if (!RB.on) return;
+  RB.on = false; clearInterval(RB.timer); clearTimeout(RB.second);
+  RB.recs.forEach(r => { try { r.mr.stop(); } catch (e) {} });
+  RB.recs = []; try { RB.vtrack.stop(); } catch (e) {} RB.vtrack = null;
+  onReplayChanged();
+}
+async function saveReplay() {
+  if (!RB.on || !RB.recs.length) { toast('Start the Replay Buffer first.'); return null; }
+  const r = RB.recs.reduce((a, b) => (a.t0 < b.t0 ? a : b));   // the one that has been running longest
+  const ms = performance.now() - r.t0;
+  await new Promise(res => { const h = () => { r.mr.removeEventListener('dataavailable', h); setTimeout(res, 0); }; r.mr.addEventListener('dataavailable', h); try { r.mr.requestData(); } catch (e) { res(); } setTimeout(res, 3000); });
+  let blob = new Blob(r.chunks.slice(), { type: RB.fmt.mime.split(';')[0] });
+  if (RB.fmt.ext === 'webm' || RB.fmt.ext === 'mkv') blob = await fixMatroskaDuration(blob, ms);
+  const name = buildFileName(RB.fmt.ext).replace(/^IBI Recording/, 'IBI Replay');
+  const entry = { id: uid(), name, size: blob.size, ms: Math.round(ms), mime: RB.fmt.mime, at: Date.now(), where: 'download', scene: (sceneById(coll.program) || {}).name || '', replay: true };
+  try {
+    if (FOLDER.handle && await folderReady(true)) {
+      const n = await uniqueFileIn(FOLDER.handle, name), fh = await FOLDER.handle.getFileHandle(n, { create: true }), w = await fh.createWritable();
+      await w.write(blob); await w.close(); entry.name = n; entry.where = 'folder'; entry.folder = FOLDER.name;
+    } else {
+      entry.url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = entry.url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    }
+  } catch (e) { toast('Saving the replay failed: ' + e.message, 'err'); return null; }
+  addToLibrary(entry);
+  return entry;
+}
+
 /* screenshot of the output (OBS "Screenshot (Output)") */
 async function takeScreenshot() {
   const blob = await new Promise(res => progCanvas.toBlob(res, 'image/png'));
@@ -1010,5 +1305,7 @@ async function takeScreenshot() {
 
 /* ───────────── boot of the engine ───────────── */
 coll = normalizeCollection(LS.get('collection', null)) || defaultCollection();
+UNDO.last = { key: undoKey(coll), json: JSON.stringify(coll) };   // the state when the app opened is the first undo point
+loadStinger().catch(() => {});
 sizeCanvases();
 ticker.postMessage(1000 / coll.fps);

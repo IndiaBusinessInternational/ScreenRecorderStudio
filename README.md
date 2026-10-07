@@ -1,4 +1,4 @@
-# IBI Screen Recorder Studio v1.2
+# IBI Screen Recorder Studio v2.0
 
 A browser-based screen recorder laid out like OBS Studio — by **India Business International**.
 Everything runs in the browser tab; nothing that is recorded is uploaded anywhere.
@@ -27,6 +27,16 @@ Live: https://recorder.indiabusinessinternational.online/ (until DNS is added: h
 - Stats: FPS, render time, missed frames, size, bitrate. Keyboard shortcuts (Ctrl+Alt+R/P/S/T/M, Ctrl+Alt+1…9).
 - Standard IBI app features: version badge, IBI logo, light/dark switch, installable PWA (banner, header and menu Install),
   backup & restore of the whole scene collection, edge-to-edge phone layout, Open Graph tags.
+
+## v2.0 — OBS feature parity (everything a browser can do)
+Compared against the installed OBS Studio 32.2.2 (its plugins and locale files):
+- **Sources:** Window Capture and Chrome Tab Capture (share box opens on that tab), Image Slide Show, Scene (nested), Live Captions (speech → subtitles, 17 languages).
+- **Video filters:** Color Key, Luma Key, Sharpen, Scroll, blending modes (plus the v1 colour correction, chroma key, shape, border).
+- **Audio filters:** Noise Gate (AudioWorklet), Compressor, Limiter, 3-band EQ, Balance, Sync Offset (delay), Invert Polarity — wired in OBS order.
+- **Transitions:** Fade to Color, Luma Wipe (8 shapes), Stinger (your video, transition point), per-scene Transition Override.
+- **Output:** Replay Buffer (Save Replay keeps at least the last N seconds), Output Timer (auto-stop), audio monitoring device.
+- **Studio:** Undo/Redo, copy/paste transform & filters, Multiview, Scene Collections, editable hotkeys, Stats window.
+- **Help assistant:** built-in, answers from the app's own guide, offline, no AI key (minimise keeps the chat; Esc minimises).
 
 ## Not possible in a browser
 Live streaming (RTMP) and a virtual camera — use OBS Studio for those. Phones cannot share their screen from a browser
