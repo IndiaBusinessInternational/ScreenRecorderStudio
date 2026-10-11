@@ -332,14 +332,14 @@ table.tbl kbd { white-space: normal; }
   .hp-f input { font-size: 16px; }
   .mv-top { grid-template-columns: minmax(0, 1fr); }
   .mv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  /* v2.3 (CEO 11 Oct 2026, every web app: "edge to edge with no padding"): the page is never wider than the screen,
+  /* v2.3/v2.4 (CEO 11 Oct 2026, every web app: "edge to edge with no padding"): the page is never wider than the screen,
      10px inner side padding (the least that keeps letters off curved screen edges), header 8px. Type is unchanged. */
   body { overflow-x: clip; }
   header.top { padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
-  .dock { box-shadow: none; overflow-wrap: anywhere; }
+  .dock { box-shadow: none; overflow-wrap: break-word; }
   .status { padding-left: 10px; padding-right: 10px; }
   .modal-h, .modal-b, .modal-f { padding-left: 10px; padding-right: 10px; }
-  .modal-b { overflow-wrap: anywhere; }
+  .modal-b { overflow-wrap: break-word; }
   .hp-h { padding-left: 10px; }
   .hp-log, .hp-f { padding-left: 10px; padding-right: 10px; }
 }
