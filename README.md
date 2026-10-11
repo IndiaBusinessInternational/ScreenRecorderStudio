@@ -1,4 +1,4 @@
-# IBI Screen Recorder Studio v2.2
+# IBI Screen Recorder Studio v2.3
 
 A browser-based screen recorder laid out like OBS Studio — by **India Business International**.
 Everything runs in the browser tab; nothing that is recorded is uploaded anywhere.
@@ -27,6 +27,10 @@ Live: https://recorder.indiabusinessinternational.online/ (also reachable at htt
 - Stats: FPS, render time, missed frames, size, bitrate. Keyboard shortcuts (Ctrl+Alt+R/P/S/T/M, Ctrl+Alt+1…9).
 - Standard IBI app features: version badge, IBI logo, light/dark switch, installable PWA (banner, header and menu Install),
   backup & restore of the whole scene collection, edge-to-edge phone layout, Open Graph tags.
+
+## v2.3 — phones edge to edge
+
+On phones (700px and narrower) the page is never wider than the screen, docks are full-bleed, and panels, dialogs and the help assistant use 10px side padding (header 8px). Type sizes are unchanged.
 
 ## v2.2 — ready-made scenes (what sets it apart from OBS)
 - First launch opens with **Screen Recording** (screen + mic), **Self Recording** (camera + mic) and **Screen & Self Recording** (screen + round camera bubble + mic), sharing one screen, one camera and one mic source. Existing collections get the missing ones once (matched by name).
