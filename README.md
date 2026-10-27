@@ -1,4 +1,4 @@
-# IBI Screen Recorder Studio v2.4
+# IBI Screen Recorder Studio v2.5
 
 A browser-based screen recorder laid out like OBS Studio — by **India Business International**.
 Everything runs in the browser tab; nothing that is recorded is uploaded anywhere.
@@ -27,6 +27,10 @@ Live: https://recorder.indiabusinessinternational.online/ (also reachable at htt
 - Stats: FPS, render time, missed frames, size, bitrate. Keyboard shortcuts (Ctrl+Alt+R/P/S/T/M, Ctrl+Alt+1…9).
 - Standard IBI app features: version badge, IBI logo, light/dark switch, installable PWA (banner, header and menu Install),
   backup & restore of the whole scene collection, edge-to-edge phone layout, Open Graph tags.
+
+## v2.5 — Share this app
+
+27 Oct 2026, Founder: "all web apps should have a sharing link too". A round Share button (`ibi-share.js`, IBI Share v1.0) sits at the end of the header and opens a sheet with WhatsApp, Facebook, X, Telegram, Email, Copy link and More apps; ✕, Esc and Back close it. The link preview (og-banner.png, 1200×630) already passed the WhatsApp check and is unchanged.
 
 ## v2.4 — whole words in buttons
 
