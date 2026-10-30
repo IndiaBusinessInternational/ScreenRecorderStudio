@@ -1,4 +1,4 @@
-/* IBI Media Player — the player library. v1.5.6 (30 Oct 2026: the no-picture message points to the Windows app, never "turn acceleration on"; v1.5.5 a video whose picture cannot be decoded — HEVC with graphics acceleration off — says why instead of a black screen; v1.5.1 no control-bar flicker; v1.5.0 volume to 300 %; v1.4.1 an opened file plays at once; v1.4.0 photo slideshow; born v1.0.0 27 Sep 2026)
+/* IBI Media Player — the player library. v1.6.0 (30 Oct 2026: an HEVC video Chrome cannot show offers "Open in Microsoft Edge", which plays H.264 and H.265; v1.5.6 the no-picture message points to the Windows app, never "turn acceleration on"; v1.5.5 a video whose picture cannot be decoded — HEVC with graphics acceleration off — says why instead of a black screen; v1.5.1 no control-bar flicker; v1.5.0 volume to 300 %; v1.4.1 an opened file plays at once; v1.4.0 photo slideshow; born v1.0.0 27 Sep 2026)
  *
  * One file, no dependencies. `IBIPlayer.mount(root, options)` builds a complete audio/video
  * player inside `root` and returns a small API; `index.html` mounts it standalone, and the
@@ -25,7 +25,7 @@
  */
 (function () {
   "use strict";
-  const VERSION = "1.5.6";
+  const VERSION = "1.6.0";
   const PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
   const RATE_MIN = 0.25, RATE_MAX = 4, RATE_STEP = 0.05;
   /* v1.3.0 — VOLUME BOOST past 100 %, VLC's standard (CEO, 1 Oct 2026: "I want more audio … increase the
@@ -94,6 +94,7 @@
    * the END of the file, so the top-level boxes are walked with small reads. Returns "hevc", "h264", "av1",
    * "vp9", "mpeg4", "audio" (tracks found, none of them video) or "" (not known). */
   const VIDEO_CODECS = { hvc1: "hevc", hev1: "hevc", dvh1: "hevc", dvhe: "hevc", avc1: "h264", avc3: "h264", av01: "av1", vp09: "vp9", mp4v: "mpeg4" };
+  const IS_WINDOWS = /Windows/i.test(navigator.userAgent), IS_EDGE = /\bEdg\//.test(navigator.userAgent);
   const CODEC_TEST = { hevc: 'video/mp4; codecs="hvc1.1.6.L93.B0"', h264: 'video/mp4; codecs="avc1.42E01E"', av1: 'video/mp4; codecs="av01.0.05M.08"', vp9: 'video/mp4; codecs="vp09.00.10.08"' };
   async function sniffCodec(file) {
     try {
@@ -172,7 +173,7 @@
             <div class="ibp-empty-s">Drop files or a folder here, or use Open. MP4, WebM, MKV, MOV, MP3, M4A, WAV, FLAC, OGG, and photos (JPG, PNG, WebP, GIF, AVIF) as a slideshow.</div>
             <div class="ibp-empty-b"><button type="button" class="ibp-btn ibp-btn-primary" data-act="open">Open files</button><button type="button" class="ibp-btn" data-act="open-folder">Open folder</button></div>
           </div>
-          <div class="ibp-msg" role="status" hidden><span class="ibp-msg-t"></span><button type="button" class="ibp-msg-x" data-act="msg-close" aria-label="Close message" title="Close">${ICON.close}</button></div>
+          <div class="ibp-msg" role="status" hidden><span class="ibp-msg-t"></span><div class="ibp-msg-acts" hidden></div><button type="button" class="ibp-msg-x" data-act="msg-close" aria-label="Close message" title="Close">${ICON.close}</button></div>
           <div class="ibp-flash" aria-hidden="true"></div>
           <button type="button" class="ibp-bigplay" data-act="play" aria-label="Play">${ICON.play}</button>
         </div>
@@ -658,7 +659,12 @@
       } catch (e) { showFlash("Picture in picture is not available"); }
     }
     function showFlash(text) { flash.textContent = text; flash.classList.add("ibp-flash-on"); clearTimeout(flash._t); flash._t = setTimeout(() => flash.classList.remove("ibp-flash-on"), 700); }
-    function showMsg(text, kind) { $(".ibp-msg-t").textContent = text; msg.dataset.kind = kind || ""; msg.hidden = false; }
+    function showMsg(text, kind, links) {
+      $(".ibp-msg-t").textContent = text; msg.dataset.kind = kind || ""; msg.hidden = false;
+      const acts = $(".ibp-msg-acts");
+      acts.innerHTML = (links || []).map((l) => `<a class="ibp-btn ibp-btn-primary" href="${esc(l.href)}">${esc(l.label)}</a>`).join("");
+      acts.hidden = !acts.innerHTML;
+    }
     function hideMsg() { msg.hidden = true; msg.dataset.kind = ""; }
     // v1.5.5 — a video whose picture this browser cannot decode: show the title card instead of a black box,
     // say why in plain words with the fix, and keep the sound playing.
@@ -666,10 +672,17 @@
       root.classList.add("ibp-audio", "ibp-nopic"); art.hidden = false; scheduleHide();
       $(".ibp-art-sub").textContent = "Sound only · this browser cannot show the picture";
       // v1.5.6 — the way out never asks to switch graphics acceleration on: on the IBI laptop it is off on purpose
-      // (the Grower needs the graphics card), so the Windows app comes first.
-      showMsg(it.codec === "hevc"
-        ? `No picture: ${it.name} is an HEVC (H.265) phone video. This browser cannot show HEVC here, so only the sound plays.\nTo watch it: open the file in the Windows Media Player or Photos app.\nNew recordings: set the phone camera to H.264 instead of HEVC.\nChrome and Edge show HEVC only with graphics acceleration on; if it is off on purpose, use the Windows app.`
-        : `No picture: this browser cannot decode the picture in ${it.name}, so only the sound plays.\nTo watch it: open the file in the Windows Media Player or Photos app, or convert it to MP4 (H.264).`, "nopic");
+      // in Chrome (the Grower needs the graphics card).
+      // v1.6.0 (Founder, 30 Oct 2026: "Ensure we play both H264 and also H265" → "Option 1: Edge") — Edge keeps its
+      // own graphics setting (on) and uses the Windows HEVC extension, so on Windows outside Edge the message offers
+      // "Open in Microsoft Edge" (the microsoft-edge: link). Only a host that passes `edgeUrl` gets the button.
+      const toEdge = it.codec === "hevc" && IS_WINDOWS && !IS_EDGE;
+      const links = toEdge && o.edgeUrl ? [{ href: "microsoft-edge:" + o.edgeUrl + (it.url ? "?src=" + encodeURIComponent(new URL(it.url, location.href).href) + "&title=" + encodeURIComponent(it.title) : ""), label: "Open in Microsoft Edge" }] : [];
+      showMsg(it.codec !== "hevc"
+        ? `No picture: this browser cannot decode the picture in ${it.name}, so only the sound plays.\nTo watch it: open the file in the Windows Media Player or Photos app, or convert it to MP4 (H.264).`
+        : toEdge
+          ? `No picture: ${it.name} is an HEVC (H.265) phone video, and this browser cannot show HEVC here, so only the sound plays.\nTo watch it: open IBI Media Player in Microsoft Edge${it.url ? "" : " and open the file there"} — Edge plays both H.264 and H.265. Or use the Windows Media Player or Photos app.`
+          : `No picture: ${it.name} is an HEVC (H.265) phone video, and this browser cannot show HEVC here, so only the sound plays.\nTo watch it: open the file in the Windows Media Player or Photos app.\nNew recordings: set the phone camera to H.264 instead of HEVC.`, "nopic", links);
     }
     function pictureBack(it) {
       if (!root.classList.contains("ibp-nopic")) return;

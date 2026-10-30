@@ -43,6 +43,9 @@
 .ibp-menu .ibp-ic:hover, .ibp-list .ibp-ic:hover { background: var(--ibp-card2); }
 .ibp-msg { position: absolute; left: 12px; right: 12px; top: 12px; max-height: calc(100% - 24px); overflow-y: auto; background: #3a1f06ee; color: #ffd9a8; border: 1px solid #f5a62366; border-radius: 10px; padding: 10px 48px 10px 12px; font-size: 16px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; z-index: 4; }
 .ibp-msg[hidden] { display: none; }
+.ibp-msg-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; white-space: normal; }
+.ibp-msg-acts[hidden] { display: none; }
+.ibp-msg-acts .ibp-btn { display: inline-flex; align-items: center; text-decoration: none; color: var(--ibp-accent-ink, #001a24); }
 .ibp-msg-x { position: absolute; top: 4px; right: 4px; width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: inherit; display: grid; place-items: center; cursor: pointer; }
 .ibp-msg-x:hover, .ibp-msg-x:focus-visible { background: #ffffff1f; }
 .ibp-msg-x svg { width: 22px; height: 22px; fill: currentColor; }
