@@ -1,2 +1,2 @@
-IBI Media Player v1.5.5 (repo MediaPlayer, commit a56b070), pinned copy.
+IBI Media Player v1.5.6 (repo MediaPlayer, commit 19db6ad), pinned copy.
 Re-copy app.js + styles.css when the player is updated, and bump the ?v= in studio.js loadIBIPlayer().

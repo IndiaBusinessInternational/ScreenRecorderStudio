@@ -1,4 +1,4 @@
-/* IBI Media Player — the player library. v1.5.5 (30 Oct 2026: a video whose picture cannot be decoded — HEVC with graphics acceleration off — says why instead of a black screen; v1.5.1 no control-bar flicker; v1.5.0 volume to 300 %; v1.4.1 an opened file plays at once; v1.4.0 photo slideshow; born v1.0.0 27 Sep 2026)
+/* IBI Media Player — the player library. v1.5.6 (30 Oct 2026: the no-picture message points to the Windows app, never "turn acceleration on"; v1.5.5 a video whose picture cannot be decoded — HEVC with graphics acceleration off — says why instead of a black screen; v1.5.1 no control-bar flicker; v1.5.0 volume to 300 %; v1.4.1 an opened file plays at once; v1.4.0 photo slideshow; born v1.0.0 27 Sep 2026)
  *
  * One file, no dependencies. `IBIPlayer.mount(root, options)` builds a complete audio/video
  * player inside `root` and returns a small API; `index.html` mounts it standalone, and the
@@ -25,7 +25,7 @@
  */
 (function () {
   "use strict";
-  const VERSION = "1.5.5";
+  const VERSION = "1.5.6";
   const PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
   const RATE_MIN = 0.25, RATE_MAX = 4, RATE_STEP = 0.05;
   /* v1.3.0 — VOLUME BOOST past 100 %, VLC's standard (CEO, 1 Oct 2026: "I want more audio … increase the
@@ -665,10 +665,11 @@
     function noPicture(it) {
       root.classList.add("ibp-audio", "ibp-nopic"); art.hidden = false; scheduleHide();
       $(".ibp-art-sub").textContent = "Sound only · this browser cannot show the picture";
-      const fix = "Fix in Chrome or Edge: Settings → System → turn on “Use graphics acceleration when available” → Relaunch, then open the file again.";
+      // v1.5.6 — the way out never asks to switch graphics acceleration on: on the IBI laptop it is off on purpose
+      // (the Grower needs the graphics card), so the Windows app comes first.
       showMsg(it.codec === "hevc"
-        ? `No picture: ${it.name} is an HEVC (H.265) phone video, and this browser cannot decode HEVC right now, so only the sound plays.\n${fix}\nOr play it in the Windows Media Player app.`
-        : `No picture: this browser cannot decode the picture in ${it.name}, so only the sound plays.\n${fix}\nOr convert the file to MP4 (H.264).`, "nopic");
+        ? `No picture: ${it.name} is an HEVC (H.265) phone video. This browser cannot show HEVC here, so only the sound plays.\nTo watch it: open the file in the Windows Media Player or Photos app.\nNew recordings: set the phone camera to H.264 instead of HEVC.\nChrome and Edge show HEVC only with graphics acceleration on; if it is off on purpose, use the Windows app.`
+        : `No picture: this browser cannot decode the picture in ${it.name}, so only the sound plays.\nTo watch it: open the file in the Windows Media Player or Photos app, or convert it to MP4 (H.264).`, "nopic");
     }
     function pictureBack(it) {
       if (!root.classList.contains("ibp-nopic")) return;

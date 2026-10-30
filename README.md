@@ -1,4 +1,6 @@
-# IBI Screen Recorder Studio v2.6
+# IBI Screen Recorder Studio v2.7
+
+**v2.7 — demo player = IBI Media Player v1.5.6 (30 Oct 2026)**: the no-picture message points to the Windows Media Player or Photos app, never to switching graphics acceleration on.
 
 **v2.6 — demo player = IBI Media Player v1.5.5 (30 Oct 2026)**: a video whose picture the browser cannot decode (e.g. a phone's HEVC video with Chrome's graphics acceleration off) shows a "Sound only" card and the fix instead of a black screen. `vendor/ibi-player/` re-copied; nothing else changed.
 

@@ -368,8 +368,8 @@ let playerLoad = null;
 function loadIBIPlayer() {
   if (window.IBIPlayer) return Promise.resolve(true);
   if (!playerLoad) playerLoad = new Promise(res => {
-    const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'vendor/ibi-player/styles.css?v=1.5.5'; document.head.appendChild(l);
-    const s = document.createElement('script'); s.src = 'vendor/ibi-player/app.js?v=1.5.5'; s.onload = () => res(!!window.IBIPlayer); s.onerror = () => { playerLoad = null; res(false); }; document.head.appendChild(s);
+    const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'vendor/ibi-player/styles.css?v=1.5.6'; document.head.appendChild(l);
+    const s = document.createElement('script'); s.src = 'vendor/ibi-player/app.js?v=1.5.6'; s.onload = () => res(!!window.IBIPlayer); s.onerror = () => { playerLoad = null; res(false); }; document.head.appendChild(s);
   });
   return playerLoad;
 }
