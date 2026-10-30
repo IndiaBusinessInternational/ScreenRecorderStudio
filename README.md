@@ -1,4 +1,6 @@
-# IBI Screen Recorder Studio v2.5
+# IBI Screen Recorder Studio v2.6
+
+**v2.6 — demo player = IBI Media Player v1.5.5 (30 Oct 2026)**: a video whose picture the browser cannot decode (e.g. a phone's HEVC video with Chrome's graphics acceleration off) shows a "Sound only" card and the fix instead of a black screen. `vendor/ibi-player/` re-copied; nothing else changed.
 
 A browser-based screen recorder laid out like OBS Studio — by **India Business International**.
 Everything runs in the browser tab; nothing that is recorded is uploaded anywhere.

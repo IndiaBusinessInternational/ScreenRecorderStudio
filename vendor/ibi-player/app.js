@@ -1,4 +1,4 @@
-/* IBI Media Player — the player library. v1.5.1 (6 Oct 2026: no control-bar flicker; v1.5.0 volume to 300 %; v1.4.1 an opened file plays at once; v1.4.0 photo slideshow; born v1.0.0 27 Sep 2026)
+/* IBI Media Player — the player library. v1.5.5 (30 Oct 2026: a video whose picture cannot be decoded — HEVC with graphics acceleration off — says why instead of a black screen; v1.5.1 no control-bar flicker; v1.5.0 volume to 300 %; v1.4.1 an opened file plays at once; v1.4.0 photo slideshow; born v1.0.0 27 Sep 2026)
  *
  * One file, no dependencies. `IBIPlayer.mount(root, options)` builds a complete audio/video
  * player inside `root` and returns a small API; `index.html` mounts it standalone, and the
@@ -20,11 +20,12 @@
  *   • lock-screen / headset controls through the Media Session API;
  *   • opens files handed to the installed app (file_handlers) and a ?src=URL query.
  *   * H.265/HEVC, MKV and MOV depend on the operating system's decoders; Chrome on Windows 11
- *     plays them when the codec is installed.
+ *     plays them when the codec is installed. Chrome and Edge decode HEVC only with graphics
+ *     acceleration on; without it the sound plays and the player says why there is no picture.
  */
 (function () {
   "use strict";
-  const VERSION = "1.5.1";
+  const VERSION = "1.5.5";
   const PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
   const RATE_MIN = 0.25, RATE_MAX = 4, RATE_STEP = 0.05;
   /* v1.3.0 — VOLUME BOOST past 100 %, VLC's standard (CEO, 1 Oct 2026: "I want more audio … increase the
@@ -86,6 +87,42 @@
     return "WEBVTT\n\n" + String(text).replace(/\r/g, "").replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2").trim() + "\n";
   }
 
+  /* v1.5.5 — which codecs a local MP4/MOV holds (CEO, 30 Oct 2026: a Pixel 10a video played its sound over a
+   * black screen). Phones record HEVC (H.265); Chrome and Edge decode HEVC only on the graphics card, so with
+   * "Use graphics acceleration" off they play the sound and silently drop the picture — no error event at all.
+   * The codec is the four-letter sample entry after each 'stsd' inside the 'moov' box, which phones write at
+   * the END of the file, so the top-level boxes are walked with small reads. Returns "hevc", "h264", "av1",
+   * "vp9", "mpeg4", "audio" (tracks found, none of them video) or "" (not known). */
+  const VIDEO_CODECS = { hvc1: "hevc", hev1: "hevc", dvh1: "hevc", dvhe: "hevc", avc1: "h264", avc3: "h264", av01: "av1", vp09: "vp9", mp4v: "mpeg4" };
+  const CODEC_TEST = { hevc: 'video/mp4; codecs="hvc1.1.6.L93.B0"', h264: 'video/mp4; codecs="avc1.42E01E"', av1: 'video/mp4; codecs="av01.0.05M.08"', vp9: 'video/mp4; codecs="vp09.00.10.08"' };
+  async function sniffCodec(file) {
+    try {
+      if (!/^(mp4|m4v|mov|3gp|3g2)$/.test(extOf(file.name))) return "";
+      let at = 0;
+      for (let n = 0; n < 64 && at + 8 <= file.size; n++) {
+        const d = new DataView(await file.slice(at, at + 16).arrayBuffer());
+        let size = d.getUint32(0);
+        const type = String.fromCharCode(d.getUint8(4), d.getUint8(5), d.getUint8(6), d.getUint8(7));
+        if (size === 1 && d.byteLength >= 16) size = d.getUint32(8) * 4294967296 + d.getUint32(12);
+        else if (size === 0) size = file.size - at;
+        if (size < 8) return "";
+        if (type === "moov") {
+          const b = new Uint8Array(await file.slice(at, at + Math.min(size, 8 << 20)).arrayBuffer());
+          let tracks = 0;
+          for (let i = 0; i + 20 <= b.length; i++) {
+            if (b[i] !== 0x73 || b[i + 1] !== 0x74 || b[i + 2] !== 0x73 || b[i + 3] !== 0x64) continue;
+            tracks++;
+            const cc = String.fromCharCode(b[i + 16], b[i + 17], b[i + 18], b[i + 19]);
+            if (VIDEO_CODECS[cc]) return VIDEO_CODECS[cc];
+          }
+          return tracks ? "audio" : "";
+        }
+        at += size;
+      }
+    } catch {}
+    return "";
+  }
+
   const ICON = {
     play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
     pause: '<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>',
@@ -135,7 +172,7 @@
             <div class="ibp-empty-s">Drop files or a folder here, or use Open. MP4, WebM, MKV, MOV, MP3, M4A, WAV, FLAC, OGG, and photos (JPG, PNG, WebP, GIF, AVIF) as a slideshow.</div>
             <div class="ibp-empty-b"><button type="button" class="ibp-btn ibp-btn-primary" data-act="open">Open files</button><button type="button" class="ibp-btn" data-act="open-folder">Open folder</button></div>
           </div>
-          <div class="ibp-msg" hidden></div>
+          <div class="ibp-msg" role="status" hidden><span class="ibp-msg-t"></span><button type="button" class="ibp-msg-x" data-act="msg-close" aria-label="Close message" title="Close">${ICON.close}</button></div>
           <div class="ibp-flash" aria-hidden="true"></div>
           <button type="button" class="ibp-bigplay" data-act="play" aria-label="Play">${ICON.play}</button>
         </div>
@@ -420,7 +457,7 @@
       if (boost.src && !sameOrigin(src)) video.crossOrigin = "anonymous"; else video.removeAttribute("crossorigin");
       video.src = src;
       video.poster = it.poster || "";
-      root.classList.toggle("ibp-audio", it.kind === "audio");
+      root.classList.toggle("ibp-audio", it.kind === "audio"); root.classList.remove("ibp-nopic");
       $(".ibp-art-title").textContent = it.title;
       $(".ibp-art-sub").textContent = it.name === it.title ? "" : it.name;
       empty.hidden = true;
@@ -432,6 +469,10 @@
       renderList();
       updatePhotoUI();   // puts the speed label back from "5 s" to the rate
       setMediaSession(it);
+      if (it.kind === "video") {
+        if (it.codec !== undefined || !it.file) codecKnown(it);
+        else { it.codec = ""; sniffCodec(it.file).then((c) => { it.codec = c; codecKnown(it); }); }
+      }
       if (play) video.play().catch(() => {});
       if (o.onChange) o.onChange(it, i);
     }
@@ -617,8 +658,38 @@
       } catch (e) { showFlash("Picture in picture is not available"); }
     }
     function showFlash(text) { flash.textContent = text; flash.classList.add("ibp-flash-on"); clearTimeout(flash._t); flash._t = setTimeout(() => flash.classList.remove("ibp-flash-on"), 700); }
-    function showMsg(text) { msg.textContent = text; msg.hidden = false; }
-    function hideMsg() { msg.hidden = true; }
+    function showMsg(text, kind) { $(".ibp-msg-t").textContent = text; msg.dataset.kind = kind || ""; msg.hidden = false; }
+    function hideMsg() { msg.hidden = true; msg.dataset.kind = ""; }
+    // v1.5.5 — a video whose picture this browser cannot decode: show the title card instead of a black box,
+    // say why in plain words with the fix, and keep the sound playing.
+    function noPicture(it) {
+      root.classList.add("ibp-audio", "ibp-nopic"); art.hidden = false; scheduleHide();
+      $(".ibp-art-sub").textContent = "Sound only · this browser cannot show the picture";
+      const fix = "Fix in Chrome or Edge: Settings → System → turn on “Use graphics acceleration when available” → Relaunch, then open the file again.";
+      showMsg(it.codec === "hevc"
+        ? `No picture: ${it.name} is an HEVC (H.265) phone video, and this browser cannot decode HEVC right now, so only the sound plays.\n${fix}\nOr play it in the Windows Media Player app.`
+        : `No picture: this browser cannot decode the picture in ${it.name}, so only the sound plays.\n${fix}\nOr convert the file to MP4 (H.264).`, "nopic");
+    }
+    function pictureBack(it) {
+      if (!root.classList.contains("ibp-nopic")) return;
+      root.classList.remove("ibp-audio", "ibp-nopic"); art.hidden = true; scheduleHide();
+      $(".ibp-art-sub").textContent = it.name === it.title ? "" : it.name;
+      if (msg.dataset.kind === "nopic") hideMsg();
+    }
+    // Before the file loads: a codec this browser says it cannot decode is reported at once. After it loads,
+    // videoWidth decides (it is 0 when the picture was dropped).
+    function codecKnown(it) {
+      if (st.items[st.index] !== it) return;
+      if (video.readyState >= 1) {
+        if (!root.classList.contains("ibp-nopic")) return;
+        if (it.codec !== "audio") { noPicture(it); return; }
+        // A sound-only MP4 (no picture to lose): keep the title card, drop the warning.
+        root.classList.remove("ibp-nopic"); $(".ibp-art-sub").textContent = it.name === it.title ? "" : it.name;
+        if (msg.dataset.kind === "nopic") hideMsg();
+        return;
+      }
+      if (CODEC_TEST[it.codec] && video.canPlayType(CODEC_TEST[it.codec]) === "") noPicture(it);
+    }
 
     /* --------------------------------- captions -------------------------------- */
     function clearCaptions() { $$("track", video).forEach((t) => t.remove()); if (st.ccUrl) { URL.revokeObjectURL(st.ccUrl); st.ccUrl = ""; } ccBtn.classList.remove("ibp-on"); ccBtn.classList.remove("ibp-has"); }
@@ -730,7 +801,14 @@
     video.addEventListener("timeupdate", () => { if (!st.dragging) paint(); if (!st.saveTimer) st.saveTimer = setTimeout(() => { st.saveTimer = 0; savePos(); }, 5000); });
     video.addEventListener("durationchange", () => { const it = st.items[st.index]; if (it && isFinite(video.duration)) { it.duration = video.duration; const li = itemsEl.querySelector(`.ibp-item[data-i="${st.index}"] .ibp-item-sub`); if (li && !/·/.test(li.textContent)) li.textContent += " · " + fmtTime(video.duration); } paint(); });
     video.addEventListener("progress", paintBuffer);
-    video.addEventListener("loadedmetadata", () => { paint(); const it = st.items[st.index]; if (it && it.kind === "video" && video.videoWidth === 0 && video.audioTracks !== undefined) { /* audio-only container */ } });
+    video.addEventListener("loadedmetadata", () => {
+      paint();
+      const it = st.items[st.index];
+      if (!it || it.kind !== "video" || isPhoto()) return;
+      if (video.videoWidth > 0) pictureBack(it);
+      else if (it.codec === "audio") { root.classList.add("ibp-audio"); art.hidden = false; scheduleHide(); }
+      else noPicture(it);
+    });
     video.addEventListener("error", () => {
       if (isPhoto()) return;
       const e = video.error; const it = st.items[st.index];
@@ -796,6 +874,7 @@
       else if (act === "mute") { setMuted(!st.muted); showFlash(volText()); }
       else if (act === "speed") toggleMenu(speedMenu, null, isPhoto() ? $(".ibp-chip[data-psec].ibp-on") : null);
       else if (act === "closemenu") toggleMenu(speedMenu, false);
+      else if (act === "msg-close") hideMsg();
       else if (act === "read") { readMenu.hidden = !readMenu.hidden; if (!readMenu.hidden) { speedMenu.hidden = true; loadVoices(); readText.focus({ preventScroll: true }); } }
       else if (act === "closeread") readMenu.hidden = true;
       else if (act === "readplay") speak();
@@ -871,7 +950,7 @@
       else if (k === "Home") seekTo(0);
       else if (k === "End") seekTo(1);
       else if (/^[0-9]$/.test(k)) seekTo(Number(k) / 10);
-      else if (k === "Escape") { if (!speedMenu.hidden) speedMenu.hidden = true; else if (listEl.classList.contains("ibp-list-open")) listEl.classList.remove("ibp-list-open"); else handled = false; }
+      else if (k === "Escape") { if (!speedMenu.hidden) speedMenu.hidden = true; else if (listEl.classList.contains("ibp-list-open")) listEl.classList.remove("ibp-list-open"); else if (!msg.hidden) hideMsg(); else handled = false; }
       else handled = false;
       if (handled) e.preventDefault();
     }
@@ -898,7 +977,7 @@
       const b = controlsEl.getBoundingClientRect();
       return lastPX >= b.left && lastPX <= b.right && lastPY >= b.top - 8 && lastPY <= b.bottom;
     }
-    function scheduleHide() { clearTimeout(st.hideTimer); root.classList.remove("ibp-hide"); if (playingNow() && !pointerOnControls() && !root.classList.contains("ibp-audio")) st.hideTimer = setTimeout(() => { if (speedMenu.hidden && !pointerOnControls()) root.classList.add("ibp-hide"); }, 2600); }
+    function scheduleHide() { clearTimeout(st.hideTimer); root.classList.remove("ibp-hide"); if (playingNow() && !pointerOnControls() && !root.classList.contains("ibp-audio")) st.hideTimer = setTimeout(() => { if (speedMenu.hidden && !pointerOnControls() && !root.classList.contains("ibp-audio")) root.classList.add("ibp-hide"); }, 2600); }
     root.addEventListener("pointerleave", () => { lastPX = lastPY = -1; overControls = false; scheduleHide(); }, { passive: true });   // left the player: it may hide
     root.addEventListener("pointermove", (e) => {
       if (e.pointerType === "mouse" && e.clientX === lastPX && e.clientY === lastPY) return;   // a layout change, not a move
